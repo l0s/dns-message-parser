@@ -23,5 +23,6 @@ mod subtypes;
 #[cfg(test)]
 mod tests;
 mod unknown;
+mod draft_ietf_dnsop_svcb_https;
 
 use enums::Header;

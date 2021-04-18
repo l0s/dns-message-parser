@@ -21,3 +21,4 @@ mod rfc_7553;
 mod rfc_8659;
 mod subtypes;
 mod unknown;
+mod draft_ietf_dnsop_svcb_https;

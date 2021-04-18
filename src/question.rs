@@ -106,6 +106,8 @@ try_from_enum_to_integer! {
         OPENPGPKEY = 61,
         CSYNC = 62,
         ZONEMD = 63,
+        SVCB = 64, // TODO docs
+        HTTPS = 65, // TODO docs
 
         SPF = 99,
         UINFO = 100,

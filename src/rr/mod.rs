@@ -65,6 +65,7 @@ mod rfc_7553;
 mod rfc_8659;
 mod subtypes;
 mod unknown;
+mod draft_ietf_dnsop_svcb_https;
 
 pub use edns::rfc_6891::OPT;
 pub use enums::{Class, ToType, Type, RR};
@@ -92,3 +93,4 @@ pub use rfc_7553::URI;
 pub use rfc_8659::{Tag, TagError, CAA};
 pub use subtypes::{Address, AddressError, AddressFamilyNumber};
 pub use unknown::{EID, NIMLOC};
+pub use draft_ietf_dnsop_svcb_https::{SVCB, HTTPS, ServiceParameter, ServiceBindingMode};

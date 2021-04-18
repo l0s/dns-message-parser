@@ -1,7 +1,8 @@
 use dns_message_parser::rr::{
     AFSDBSubtype, Class, ISDNAddress, PSDNAddress, SSHFPAlgorithm, SSHFPType, A, AAAA, AFSDB, APL,
     CNAME, DNAME, EID, EUI48, EUI64, GPOS, HINFO, ISDN, KX, L32, L64, LP, MB, MD, MF, MG, MINFO,
-    MR, MX, NID, NIMLOC, NS, OPT, PTR, PX, RP, RR, RT, SA, SOA, SRV, SSHFP, TXT, URI, X25,
+    MR, MX, NID, NIMLOC, NS, OPT, PTR, PX, RP, RR, RT, SA, SOA, SRV, SSHFP, TXT, URI, X25, SVCB,
+    HTTPS
 };
 use dns_message_parser::DomainName;
 use std::convert::TryFrom;
@@ -578,13 +579,41 @@ fn opt() {
 }
 
 #[test]
-fn rr_apl() {
-    let domain_name = DomainName::try_from("example.org").unwrap();
-    let apitems = Vec::new();
-    let rr = RR::APL(APL {
-        domain_name,
+fn rr_svcb() {
+    // given
+    let domain_name = DomainName::try_from("www.example.com").unwrap();
+    let target_name = DomainName::try_from("service.example.com").unwrap();
+    let rr = RR::SVCB(SVCB {
+        name: domain_name,
         ttl: 300,
-        apitems,
+        priority: 1,
+        target_name,
+        parameters: vec![]
     });
-    assert_eq!(rr.get_ttl(), Some(300));
+
+    // when
+    let ttl = rr.get_ttl();
+
+    // then
+    assert_eq!(ttl, Some(300));
+}
+
+#[test]
+fn rr_https() {
+    // given
+    let domain_name = DomainName::try_from("www.example.com").unwrap();
+    let target_name = DomainName::try_from("service.example.com").unwrap();
+    let rr = RR::HTTPS(HTTPS {
+        name: domain_name,
+        ttl: 300,
+        priority: 1,
+        target_name,
+        parameters: vec![]
+    });
+
+    // when
+    let ttl = rr.get_ttl();
+
+    // then
+    assert_eq!(ttl, Some(300));
 }

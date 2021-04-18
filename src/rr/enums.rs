@@ -4,6 +4,7 @@ pub use super::{
     RP, RT, SOA, SRV, SSHFP, TXT, URI, WKS, X25,
 };
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use crate::rr::draft_ietf_dnsop_svcb_https::{SVCB, HTTPS};
 
 try_from_enum_to_integer! {
     #[repr(u16)]
@@ -192,6 +193,19 @@ try_from_enum_to_integer! {
         CSYNC = 62,
         ZONEMD = 63,
 
+        /// The [service binding] resource record type. This is still an internet draft.
+        ///
+        /// This is used to locate alternative endpoints for a service.
+        ///
+        /// TODO link issue
+        ///
+        /// [service binding] https://datatracker.ietf.org/doc/draft-ietf-dnsop-svcb-https/04/
+        SVCB = 64,
+        /// The [https] resource record type. This is still an internet draft.
+        ///
+        /// [https] https://datatracker.ietf.org/doc/draft-ietf-dnsop-svcb-https/04/
+        HTTPS = 65,
+
         SPF = 99,
         UINFO = 100,
         UID = 101,
@@ -272,6 +286,10 @@ pub enum RR {
     DS(DS),
     DNSKEY(DNSKEY),
     CAA(CAA),
+    /// FIXME
+    SVCB(SVCB),
+    /// FIXME
+    HTTPS(HTTPS),
 }
 
 impl RR {
@@ -321,6 +339,8 @@ impl RR {
             RR::DS(ds) => Some(ds.ttl),
             RR::DNSKEY(dnskey) => Some(dnskey.ttl),
             RR::CAA(caa) => Some(caa.ttl),
+            RR::SVCB(svcb) => Some(svcb.ttl),
+            RR::HTTPS(https) => Some(https.ttl),
         }
     }
 
@@ -370,6 +390,8 @@ impl RR {
             RR::DS(ds) => Some(ds.class.clone()),
             RR::DNSKEY(dnskey) => Some(dnskey.class.clone()),
             RR::CAA(caa) => Some(caa.class.clone()),
+            RR::SVCB(_) => Some(Class::IN),
+            RR::HTTPS(_) => Some(Class::IN),
         }
     }
 }
@@ -421,6 +443,8 @@ impl Display for RR {
             RR::DS(ds) => ds.fmt(f),
             RR::DNSKEY(dnskey) => dnskey.fmt(f),
             RR::CAA(caa) => caa.fmt(f),
+            RR::SVCB(svcb) => svcb.fmt(f),
+            RR::HTTPS(https) => https.fmt(f),
         }
     }
 }

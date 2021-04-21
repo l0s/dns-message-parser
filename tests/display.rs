@@ -776,7 +776,7 @@ fn rr_svcb_alias() {
         ttl: 7200,
         priority: 0,
         target_name,
-        parameters: vec![]
+        parameters: vec![],
     };
 
     // when
@@ -791,21 +791,15 @@ fn rr_svcb_service() {
     // given
     let domain_name = DomainName::try_from("svc4.example.net.").unwrap();
     let target_name = DomainName::try_from("svc4.example.net.").unwrap();
-    let application_layer_protocol = ServiceParameter {
-        key: "alpn".to_string(),
-        value: Some("bar".to_string()),
-    };
-    let port = ServiceParameter {
-        key: "port".to_string(),
-        value: Some("8004".to_string()),
-    };
+    let application_layer_protocol_negotiation = ServiceParameter::ALPN { alpn_ids: vec!["bar".to_string()] };
+    let port = ServiceParameter::PORT { port: 8004 };
 
     let service_binding = SVCB {
         name: domain_name,
         ttl: 7200,
         priority: 3,
         target_name,
-        parameters: vec![application_layer_protocol, port],
+        parameters: vec![application_layer_protocol_negotiation, port],
     };
 
     // when
@@ -828,7 +822,7 @@ fn rr_https_alias_default() {
         ttl: 7200,
         priority: 0, // alias mode
         target_name,
-        parameters: vec![]
+        parameters: vec![],
     };
 
     // when
@@ -851,7 +845,7 @@ fn rr_https_alias_alternative_port() {
         ttl: 7200,
         priority: 0, // alias mode
         target_name,
-        parameters: vec![]
+        parameters: vec![],
     };
 
     // when
@@ -868,20 +862,14 @@ fn rr_https_quic_to_udp() {
     // given
     let domain_name = DomainName::try_from("svc.example.net").unwrap();
     let target_name = DomainName::try_from("svc3.example.net").unwrap();
-    let application_layer_protocol = ServiceParameter {
-        key: "alpn".to_string(),
-        value: Some("h3".to_string()),
-    };
-    let port = ServiceParameter {
-        key: "port".to_string(),
-        value: Some("8003".to_string()),
-    };
+    let application_layer_protocol_negotiation = ServiceParameter::ALPN { alpn_ids: vec!["h3".to_string()] };
+    let port = ServiceParameter::PORT { port: 8003 };
     let service_binding = HTTPS {
         name: domain_name,
         ttl: 7200,
         priority: 2,
         target_name,
-        parameters: vec![application_layer_protocol, port],
+        parameters: vec![application_layer_protocol_negotiation, port],
     };
 
     // when
@@ -898,20 +886,14 @@ fn rr_https_h2_to_tcp() {
     // given
     let domain_name = DomainName::try_from("svc.example.net").unwrap();
     let target_name = DomainName::try_from("svc2.example.net").unwrap();
-    let application_layer_protocol = ServiceParameter {
-        key: "alpn".to_string(),
-        value: Some("h2".to_string()),
-    };
-    let port = ServiceParameter {
-        key: "port".to_string(),
-        value: Some("8002".to_string()),
-    };
+    let application_layer_protocol_negotiation = ServiceParameter::ALPN { alpn_ids: vec!["h2".to_string()] };
+    let port = ServiceParameter::PORT { port: 8002 };
     let service_binding = HTTPS {
         name: domain_name,
         ttl: 7200,
         priority: 3,
         target_name,
-        parameters: vec![application_layer_protocol, port],
+        parameters: vec![application_layer_protocol_negotiation, port],
     };
 
     // when

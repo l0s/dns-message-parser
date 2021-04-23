@@ -10,11 +10,11 @@ use crate::rr::draft_ietf_dnsop_svcb_https::ServiceBindingMode::{Alias, Service}
 /// Looks similar to SRV
 /// e.g. _Port._Scheme.Name TTL IN SVCB SvcPriority TargetName [SvcParams...]
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SVCB {
+pub struct SVCB { // TODO consolidate SVCB and HTTPS into ServiceBinding
     pub name: DomainName,
     pub ttl: u32,
 
-    // The class is always IN, Internet
+    // The class is always IN (Internet, 0x0001)
 
     /// The `SvcPriority` field, a value between 0 and 65535
     /// SVCB resource records with a smaller priority SHOULD be given priority over resource records
@@ -108,8 +108,12 @@ impl HTTPS {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ServiceParameter {
-    /// Mandatory keys in this resource record
-    MANDATORY,
+    /// Mandatory keys in this resource record (service mode only)
+    MANDATORY {
+        /// the key IDs the client must support in order for this resource record to function properly
+        /// RFC section 7
+        key_ids: Vec<u16>
+    },
     /// Additional supported protocols
     ALPN {
         /// The default set of ALPNs, which SHOULD NOT be empty, e.g. "h3", "h2", "http/1.1".
@@ -125,7 +129,7 @@ pub enum ServiceParameter {
     /// IPv4 address hints
     IPV4_HINT { hints: Vec<Ipv4Addr> },
     /// Encrypted ClientHello information
-    ///
+    /// FIXME this has been renamed to "ech"
     /// TODO: refer to section 9 in the RFC
     ECH_CONFIG { config_list: Vec<u8> },
     /// IPv6 address hints
@@ -142,9 +146,10 @@ pub enum ServiceParameter {
 }
 
 impl ServiceParameter {
+
     pub fn get_registered_number(&self) -> u16 {
         match self {
-            ServiceParameter::MANDATORY => 0,
+            ServiceParameter::MANDATORY { .. } => 0,
             ServiceParameter::ALPN { .. } => 1,
             ServiceParameter::NO_DEFAULT_ALPN => 2,
             ServiceParameter::PORT { .. } => 3,
@@ -160,17 +165,22 @@ impl ServiceParameter {
         todo!()
     }
 
-    pub fn get_presentation_name(&self) -> &str {
-        match self {
-            ServiceParameter::MANDATORY => "mandatory",
-            ServiceParameter::ALPN { .. } => "alpn",
-            ServiceParameter::NO_DEFAULT_ALPN => "no-default-alpn",
-            ServiceParameter::PORT { .. } => "port",
-            ServiceParameter::IPV4_HINT { .. } => "ipv4hint",
-            ServiceParameter::ECH_CONFIG { .. } => "echconfig",
-            ServiceParameter::IPV6_HINT { .. } => "ipv6hint",
-            ServiceParameter::PRIVATE { number: _, presentation_key, wire_data: _, presentation_value: _ } => presentation_key,
-            ServiceParameter::KEY_65535 => "reserved",
+    pub fn get_presentation_name(&self) -> String { // TODO can I return &str?
+        ServiceParameter::id_to_presentation_name(self.get_registered_number())
+    }
+
+    fn id_to_presentation_name(id: u16) -> String { // TODO can I return &str?
+        match id {
+            0 => "mandatory".to_string(),
+            1 => "alpn".to_string(),
+            2 => "no-default-alpn".to_string(),
+            3 => "port".to_string(),
+            4 => "ipv4hint".to_string(),
+            5 => "echconfig".to_string(),
+            6 => "ipv6hint".to_string(),
+            65535 => "reserved".to_string(),
+            // TODO handle invalid keys [7, 65280)
+            number => format!("key{}", number).to_string(),
         }
     }
 }
@@ -178,7 +188,16 @@ impl ServiceParameter {
 impl Display for ServiceParameter {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
-            ServiceParameter::MANDATORY => write!(f, "{}", self.get_presentation_name()),
+            ServiceParameter::MANDATORY { key_ids } => {
+                let mut key_ids = key_ids.clone();
+                key_ids.sort();
+                let mandatory_keys = key_ids.iter()
+                    .map(|id| ServiceParameter::id_to_presentation_name(*id))
+                    .collect::<Vec<String>>()
+                    .join(",");
+
+                write!(f, "mandatory={}", mandatory_keys)
+            },
             ServiceParameter::ALPN { alpn_ids } => {
                 write!(f, "{}={}", self.get_presentation_name(), alpn_ids.join(","))
             },

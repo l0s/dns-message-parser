@@ -76,6 +76,7 @@ impl<'a, 'b: 'a> Decoder<'a, 'b> {
         if !self.is_finished()? {
             return Err(TooManyBytes(self.bytes.len(), self.offset));
         }
+        parameters.sort();
         Ok(ServiceBinding {
             name: header.domain_name,
             ttl: header.ttl,
@@ -209,7 +210,7 @@ mod tests {
         assert_eq!(result.ttl, 7200);
         assert_eq!(result.name, DomainName::try_from("test.example.com").unwrap());
         assert_eq!(result.parameters.len(), 1);
-        if let ServiceParameter::PRIVATE { number, presentation_key: _, wire_data: _, presentation_value: _ } = &result.parameters[0] {
+        if let ServiceParameter::PRIVATE { number, presentation_key: _, wire_data: _, presentation_value: _ } = &result.parameters.first().unwrap() {
             assert_eq!(*number, 667);
             // assert_eq!(presentation_value.as_ref().unwrap(), "hello");
             // FIXME should be able to present value as unquoted string

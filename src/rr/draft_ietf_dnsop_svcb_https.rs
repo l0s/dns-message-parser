@@ -4,6 +4,8 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use crate::DomainName;
 use crate::rr::draft_ietf_dnsop_svcb_https::ServiceBindingMode::{Alias, Service};
 use crate::rr::{ToType, Type};
+use std::cmp::Ordering;
+use std::hash::{Hash, Hasher};
 
 /// A Service Binding record for locating alternative endpoints for a service.
 ///
@@ -20,7 +22,6 @@ pub struct ServiceBinding {
     pub priority: u16,
     pub target_name: DomainName,
     pub parameters: Vec<ServiceParameter>,
-    // TODO ensure sorted, TODO ensure no duplicate keys
     /// Indicates whether or not this is an HTTPS record (RFC section 8)
     pub https: bool,
 }
@@ -70,7 +71,7 @@ impl ServiceBinding {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Eq, PartialOrd)]
 pub enum ServiceParameter {
     /// Mandatory keys in this resource record (service mode only)
     MANDATORY {
@@ -109,6 +110,24 @@ pub enum ServiceParameter {
     KEY_65535,
 }
 
+impl PartialEq for ServiceParameter {
+    fn eq(&self, other: &Self) -> bool {
+        self.get_registered_number().eq(&other.get_registered_number())
+    }
+}
+
+impl Hash for ServiceParameter {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u16(self.get_registered_number())
+    }
+}
+
+impl Ord for ServiceParameter {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.get_registered_number().cmp(&other.get_registered_number())
+    }
+}
+
 impl ServiceParameter {
     pub fn get_registered_number(&self) -> u16 {
         match self {
@@ -124,26 +143,21 @@ impl ServiceParameter {
         }
     }
 
-    pub fn get_wire_data(&self) -> Vec<u8> { // TODO sort out the return value, should we just write to the encoder?
-        todo!()
-    }
-
-    pub fn get_presentation_name(&self) -> String { // TODO can I return &str?
+    pub fn get_presentation_name(&self) -> String {
         ServiceParameter::id_to_presentation_name(self.get_registered_number())
     }
 
-    fn id_to_presentation_name(id: u16) -> String { // TODO can I return &str?
+    fn id_to_presentation_name(id: u16) -> String {
         match id {
             0 => "mandatory".to_string(),
             1 => "alpn".to_string(),
             2 => "no-default-alpn".to_string(),
             3 => "port".to_string(),
             4 => "ipv4hint".to_string(),
-            5 => "echconfig".to_string(),
+            5 => "ech".to_string(),
             6 => "ipv6hint".to_string(),
             65535 => "reserved".to_string(),
-            // TODO handle invalid keys [7, 65280)
-            number => format!("key{}", number).to_string(),
+            number => format!("key{}", number),
         }
     }
 }

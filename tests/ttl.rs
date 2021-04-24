@@ -1,5 +1,5 @@
 use dns_message_parser::rr::{
-    AFSDBSubtype, Class, ISDNAddress, PSDNAddress, SSHFPAlgorithm, SSHFPType, A, AAAA, AFSDB, APL,
+    AFSDBSubtype, Class, ISDNAddress, PSDNAddress, SSHFPAlgorithm, SSHFPType, A, AAAA, AFSDB,
     CNAME, DNAME, EID, EUI48, EUI64, GPOS, HINFO, ISDN, KX, L32, L64, LP, MB, MD, MF, MG, MINFO,
     MR, MX, NID, NIMLOC, NS, OPT, PTR, PX, RP, RR, RT, SA, SOA, SRV, SSHFP, TXT, URI, X25, SVCB,
     HTTPS

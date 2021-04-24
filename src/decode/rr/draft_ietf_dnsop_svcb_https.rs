@@ -8,16 +8,12 @@ use super::Header;
 impl<'a, 'b: 'a> Decoder<'a, 'b> {
     pub(super) fn rr_svcb(&mut self, header: Header) -> DecodeResult<SVCB> {
         let priority = self.u16()?;
-        eprintln!("priority: {}", priority);
         let target_name = self.domain_name()?;
-        eprintln!("target_name: {}", target_name);
         let mut parameters = vec![];
         if priority != 0 {
             while !self.is_finished()? {
                 let service_parameter_key = self.u16()?;
-                eprintln!("service_parameter_key: {}", service_parameter_key);
                 let value_length = self.u16()?;
-                eprintln!("value_length: {}", value_length);
                 let value = self.read(value_length as usize)?;
                 let mut value_decoder = Decoder::main(value);
                 let service_parameter = match service_parameter_key {
@@ -31,14 +27,7 @@ impl<'a, 'b: 'a> Decoder<'a, 'b> {
                     1 => {
                         let mut alpn_ids = vec![];
                         while !value_decoder.is_finished()? {
-                            let alpn_id_length = value_decoder.u8()?;
-                            eprintln!("alpn_id_length: {}", alpn_id_length);
-                            let alpn_id = value_decoder.read(alpn_id_length as usize)?;
-                            let mut id_decoder = Decoder::main(alpn_id);
-                            let alpn_id = id_decoder.string()?;
-                            id_decoder.finished()?;
-                            eprintln!("alpn_id: {}", alpn_id);
-                            alpn_ids.push(alpn_id);
+                            alpn_ids.push(value_decoder.string()?);
                         }
                         ServiceParameter::ALPN { alpn_ids }
                     }
@@ -70,6 +59,7 @@ impl<'a, 'b: 'a> Decoder<'a, 'b> {
                         }
                         ServiceParameter::IPV6_HINT { hints }
                     }
+                    // TODO handle invalid range
                     65535 => ServiceParameter::KEY_65535,
                     number => {
                         ServiceParameter::PRIVATE {

@@ -3,14 +3,12 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 
 use crate::DomainName;
 use crate::rr::draft_ietf_dnsop_svcb_https::ServiceBindingMode::{Alias, Service};
+use crate::rr::{ToType, Type};
 
-/// FIXME
-/// A Service Binding record
-/// This bootstraps optimal connections from a single DNS query
-/// Looks similar to SRV
-/// e.g. _Port._Scheme.Name TTL IN SVCB SvcPriority TargetName [SvcParams...]
+/// A Service Binding record for locating alternative endpoints for a service.
+///
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SVCB { // TODO consolidate SVCB and HTTPS into ServiceBinding
+pub struct ServiceBinding {
     pub name: DomainName,
     pub ttl: u32,
 
@@ -21,9 +19,21 @@ pub struct SVCB { // TODO consolidate SVCB and HTTPS into ServiceBinding
     /// with a larger value.
     pub priority: u16,
     pub target_name: DomainName,
-    pub parameters: Vec<ServiceParameter>, // TODO ensure sorted, TODO ensure no duplicate keys
+    pub parameters: Vec<ServiceParameter>,
+    // TODO ensure sorted, TODO ensure no duplicate keys
+    /// Indicates whether or not this is an HTTPS record (RFC section 8)
+    pub https: bool,
 }
-impl_to_type!(SVCB);
+
+impl ToType for ServiceBinding {
+    fn to_type(&self) -> Type {
+        if self.https {
+            Type::HTTPS
+        } else {
+            Type::SVCB
+        }
+    }
+}
 
 /// The modes inferred from the `SvcPriority` field
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -37,11 +47,12 @@ pub enum ServiceBindingMode {
     Service,
 }
 
-impl Display for SVCB {
+impl Display for ServiceBinding {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        let record_type = if self.https { "HTTPS" } else { "SVCB" };
         write!(f,
-               "{} {} IN SVCB {} {}",
-               self.name, self.ttl, self.priority, self.target_name)?;
+               "{} {} IN {} {} {}",
+               self.name, self.ttl, record_type, self.priority, self.target_name)?;
         self.parameters.iter().map(|parameter| -> FmtResult {
             write!(f, " ")?;
             parameter.fmt(f)
@@ -49,54 +60,7 @@ impl Display for SVCB {
     }
 }
 
-impl SVCB {
-    pub fn mode(&self) -> ServiceBindingMode {
-        if self.priority == 0 {
-            Alias
-        } else {
-            Service
-        }
-    }
-}
-
-/// FIXME
-/// An SVCB-compatible resource record type specialised for HTTPS
-/// It does not use the underscore prefix scheme from HTTPS, improving compatibility with wildcard
-/// domains, and is compatible with existing CNAME delegations.
-/// It indicates that the origin defaults to HTTPS.
-///
-/// Encodes the "authority" portion of a URI (e.g. scheme, name, port, and more)
-/// protocol is skipped if it is https
-/// DNS servers treat SVCB and HTTPs identically
-///
-/// Specification does not rely on DNSSEC. Clients should always treat HTTPS records as untrusted.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct HTTPS {
-    pub name: DomainName,
-    pub ttl: u32,
-
-    // The class is always IN, Internet
-
-    /// The SvcPriority field, a value between 0 and 65535
-    pub priority: u16,
-    pub target_name: DomainName,
-    pub parameters: Vec<ServiceParameter>, // TODO ensure sorted, TODO ensure no duplicate keys
-}
-impl_to_type!(HTTPS);
-
-impl Display for HTTPS {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f,
-               "{} {} IN HTTPS {} {}",
-               self.name, self.ttl, self.priority, self.target_name)?;
-        self.parameters.iter().map(|parameter| -> FmtResult {
-            write!(f, " ")?;
-            parameter.fmt(f)
-        }).collect()
-    }
-}
-
-impl HTTPS {
+impl ServiceBinding {
     pub fn mode(&self) -> ServiceBindingMode {
         if self.priority == 0 {
             Alias
@@ -146,7 +110,6 @@ pub enum ServiceParameter {
 }
 
 impl ServiceParameter {
-
     pub fn get_registered_number(&self) -> u16 {
         match self {
             ServiceParameter::MANDATORY { .. } => 0,
@@ -197,10 +160,10 @@ impl Display for ServiceParameter {
                     .join(",");
 
                 write!(f, "mandatory={}", mandatory_keys)
-            },
+            }
             ServiceParameter::ALPN { alpn_ids } => {
                 write!(f, "{}={}", self.get_presentation_name(), alpn_ids.join(","))
-            },
+            }
             ServiceParameter::NO_DEFAULT_ALPN => write!(f, "{}", self.get_presentation_name()),
             ServiceParameter::PORT { port } => write!(f, "{}={}", self.get_presentation_name(), port),
             ServiceParameter::IPV4_HINT { hints } => {
@@ -211,7 +174,7 @@ impl Display for ServiceParameter {
                            .map(|hint| hint.to_string())
                            .collect::<Vec<String>>()
                            .join(","))
-            },
+            }
             ServiceParameter::ECH_CONFIG { config_list: _ } => {
                 todo!()
             }
@@ -223,7 +186,7 @@ impl Display for ServiceParameter {
                            .map(|hint| hint.to_string())
                            .collect::<Vec<String>>()
                            .join(","))
-            },
+            }
             ServiceParameter::PRIVATE { number: _, presentation_key: _, wire_data: _, presentation_value } => {
                 match presentation_value {
                     None => write!(f, "{}", self.get_presentation_name()),
@@ -238,23 +201,24 @@ impl Display for ServiceParameter {
 #[cfg(test)]
 mod tests {
     use std::convert::TryFrom;
-    use crate::rr::{SVCB, RR};
-    use crate::{DomainName, Dns, Flags, Opcode, RCode};
-    use crate::question::{Question, QClass, QType};
 
+    use crate::{Dns, DomainName, Flags, Opcode, RCode};
+    use crate::question::{QClass, QType, Question};
+    use crate::rr::{RR, ServiceBinding};
 
     #[test]
-    fn test() {
+    fn encode_decode_alias() {
         // given
         let domain_name = DomainName::try_from("_8443._foo.api.example.com").unwrap();
         let target_name = DomainName::try_from("svc4.example.net").unwrap();
 
-        let binding = SVCB {
+        let binding = ServiceBinding {
             name: domain_name.to_owned(),
             ttl: 7200,
             priority: 0,
             target_name,
             parameters: vec![],
+            https: false,
         };
         let dns = Dns {
             id: 0xeced,
@@ -280,7 +244,7 @@ mod tests {
                 RR::SVCB(binding),
             ],
             authorities: vec![],
-            additionals: vec![]
+            additionals: vec![],
         };
 
         // when

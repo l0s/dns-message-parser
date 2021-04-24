@@ -1,12 +1,12 @@
 use crate::decode::Decoder;
 use crate::decode::error::DecodeError::TooManyBytes;
 use crate::DecodeResult;
-use crate::rr::{HTTPS, ServiceParameter, SVCB};
+use crate::rr::{ServiceBinding, ServiceParameter};
 
 use super::Header;
 
 impl<'a, 'b: 'a> Decoder<'a, 'b> {
-    pub(super) fn rr_svcb(&mut self, header: Header) -> DecodeResult<SVCB> {
+    pub(super) fn rr_service_binding(&mut self, header: Header, https: bool) -> DecodeResult<ServiceBinding> {
         let priority = self.u16()?;
         let target_name = self.domain_name()?;
         let mut parameters = vec![];
@@ -59,7 +59,6 @@ impl<'a, 'b: 'a> Decoder<'a, 'b> {
                         }
                         ServiceParameter::IPV6_HINT { hints }
                     }
-                    // TODO handle invalid range
                     65535 => ServiceParameter::KEY_65535,
                     number => {
                         ServiceParameter::PRIVATE {
@@ -77,18 +76,16 @@ impl<'a, 'b: 'a> Decoder<'a, 'b> {
         if !self.is_finished()? {
             return Err(TooManyBytes(self.bytes.len(), self.offset));
         }
-        Ok(SVCB {
+        Ok(ServiceBinding {
             name: header.domain_name,
             ttl: header.ttl,
             priority,
             target_name,
             parameters,
+            https,
         })
     }
 
-    pub(super) fn rr_https(&mut self, _: Header) -> DecodeResult<HTTPS> {
-        todo!()
-    }
 }
 
 #[cfg(test)]
@@ -119,7 +116,7 @@ mod tests {
         };
 
         // when
-        let result = decoder.rr_svcb(header).unwrap();
+        let result = decoder.rr_service_binding(header, false).unwrap();
 
         // then
         assert_eq!(result.priority, 0);
@@ -145,7 +142,7 @@ mod tests {
         };
 
         // when
-        let result = decoder.rr_svcb(header).unwrap();
+        let result = decoder.rr_service_binding(header, false).unwrap();
 
         // then
         assert_eq!(result.priority, 1);
@@ -174,7 +171,7 @@ mod tests {
         };
 
         // when
-        let result = decoder.rr_svcb(header).unwrap();
+        let result = decoder.rr_service_binding(header, false).unwrap();
 
         // then
         assert_eq!(result.priority, 16);
@@ -204,7 +201,7 @@ mod tests {
         };
 
         // when
-        let result = decoder.rr_svcb(header).unwrap();
+        let result = decoder.rr_service_binding(header, false).unwrap();
 
         // then
         assert_eq!(result.priority, 1);
@@ -243,7 +240,7 @@ mod tests {
         };
 
         // when
-        let result = decoder.rr_svcb(header).unwrap();
+        let result = decoder.rr_service_binding(header, false).unwrap();
 
         // then
         assert_eq!(result.priority, 1);
@@ -280,7 +277,7 @@ mod tests {
         };
 
         // when
-        let result = decoder.rr_svcb(header).unwrap();
+        let result = decoder.rr_service_binding(header, false).unwrap();
 
         // then
         assert_eq!(result.priority, 1);
@@ -325,7 +322,7 @@ mod tests {
         };
 
         // when
-        let result = decoder.rr_svcb(header).unwrap();
+        let result = decoder.rr_service_binding(header, false).unwrap();
 
         // then
         assert_eq!(result.priority, 16);
@@ -363,7 +360,7 @@ mod tests {
         };
 
         // when
-        let result = decoder.rr_svcb(header).unwrap();
+        let result = decoder.rr_service_binding(header, false).unwrap();
 
         // then
         assert_eq!(result.priority, 16);

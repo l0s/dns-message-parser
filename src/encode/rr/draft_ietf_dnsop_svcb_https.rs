@@ -1,22 +1,24 @@
 use crate::encode::Encoder;
 use crate::EncodeResult;
-use crate::rr::{Class, HTTPS, ServiceBindingMode, SVCB, Type};
+use crate::rr::{Class, ServiceBinding, ServiceBindingMode, Type};
 
 impl Encoder {
-    /// Encode a service binding (SVCB) resource record
-    pub(super) fn rr_svcb(&mut self, svcb: &SVCB) -> EncodeResult<()> {
-        self.domain_name(&svcb.name)?;
-        self.rr_type(&Type::SVCB);
-        self.rr_class(&Class::IN);
-        self.u32(svcb.ttl);
 
-        // RDATA: RFC section 2.2
+    /// Encode a service binding (SVCB or HTTPS) resource record
+    pub(super) fn rr_service_binding(&mut self, service_binding: &ServiceBinding) -> EncodeResult<()> {
+        let rr_type = if service_binding.https { &Type::HTTPS } else { &Type::SVCB };
+        self.domain_name(&service_binding.name)?;
+        self.rr_type(rr_type);
+        self.rr_class(&Class::IN);
+        self.u32(service_binding.ttl);
+
+        // RDATA wire format: RFC section 2.2
         let length_index = self.create_length_index();
-        self.u16(svcb.priority);
-        self.domain_name(&svcb.target_name)?;
-        if svcb.mode() == ServiceBindingMode::Service {
+        self.u16(service_binding.priority);
+        self.domain_name(&service_binding.target_name)?;
+        if service_binding.mode() == ServiceBindingMode::Service {
             // TODO ensure sorting
-            svcb.parameters.iter().for_each(|parameter| -> () {
+            service_binding.parameters.iter().for_each(|parameter| -> () {
                 self.u16(parameter.get_registered_number());
                 let value = parameter.get_wire_data();
                 self.u16(value.len() as u16);
@@ -26,28 +28,6 @@ impl Encoder {
         self.set_length_index(length_index)
     }
 
-    /// Encode an HTTPS resource record
-    pub(super) fn rr_https(&mut self, https: &HTTPS) -> EncodeResult<()> {
-        self.domain_name(&https.name)?;
-        self.rr_type(&Type::SVCB);
-        self.rr_class(&Class::IN);
-        self.u32(https.ttl);
-
-        // RDATA: RFC section 2.2
-        let length_index = self.create_length_index();
-        self.u16(https.priority);
-        self.domain_name(&https.target_name)?;
-        if https.mode() == ServiceBindingMode::Service {
-            // TODO ensure sorting
-            https.parameters.iter().for_each(|parameter| -> () {
-                self.u16(parameter.get_registered_number());
-                let value = parameter.get_wire_data();
-                self.u16(value.len() as u16);
-                self.vec(&value);
-            });
-        }
-        self.set_length_index(length_index)
-    }
 }
 
 #[cfg(test)]
@@ -56,7 +36,7 @@ mod tests {
 
     use crate::{DomainName, Dns, Flags, RCode, Opcode};
     use crate::encode::encoder::Encoder;
-    use crate::rr::{SVCB, RR};
+    use crate::rr::{ServiceBinding, RR};
     use crate::question::{Question, QClass, QType};
 
     // #[test] // FIXME
@@ -65,12 +45,13 @@ mod tests {
         let mut encoder = Encoder::default();
         let domain_name = DomainName::try_from("_8765._baz.api.test").unwrap();
         let target_name = DomainName::try_from("svc4-baz.test").unwrap();
-        let service_binding = SVCB {
+        let service_binding = ServiceBinding {
             name: domain_name.to_owned(),
             ttl: 7200,
             priority: 0,
             target_name,
             parameters: vec![],
+            https: false,
         };
         let dns = Dns {
             id: 0xeced,

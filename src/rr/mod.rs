@@ -94,5 +94,5 @@ pub use rfc_8659::{Tag, TagError, CAA};
 pub use subtypes::{Address, AddressError, AddressFamilyNumber};
 pub use unknown::{EID, NIMLOC};
 pub use draft_ietf_dnsop_svcb_https::{
-    SVCB, HTTPS, ServiceParameter, ServiceBindingMode
+    ServiceBinding, ServiceParameter, ServiceBindingMode
 };

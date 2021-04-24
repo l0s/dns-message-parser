@@ -4,7 +4,7 @@ use dns_message_parser::rr::{
     APItem, Address, AlgorithmType, Class, DigestType, ISDNAddress, PSDNAddress, SSHFPAlgorithm,
     SSHFPType, Tag, A, AAAA, APL, CAA, CNAME, DNAME, DNSKEY, DS, EID, EUI48, EUI64, GPOS, HINFO,
     ISDN, KX, L32, L64, LP, MB, MD, MF, MG, MINFO, MR, MX, NID, NIMLOC, NS, OPT, PTR, PX, RP, RR,
-    RT, SA, SOA, SRV, SSHFP, TXT, URI, X25, ServiceParameter, SVCB, HTTPS
+    RT, SA, SOA, SRV, SSHFP, TXT, URI, X25, ServiceBinding, ServiceParameter,
 };
 use dns_message_parser::{Dns, DomainName, Flags, Opcode, RCode};
 use std::convert::TryFrom;
@@ -771,12 +771,13 @@ fn rr_svcb_alias() {
     // given
     let domain_name = DomainName::try_from("_8443._foo.api.example.com").unwrap();
     let target_name = DomainName::try_from("svc4.example.net.").unwrap();
-    let service_binding = SVCB {
+    let service_binding = ServiceBinding {
         name: domain_name,
         ttl: 7200,
         priority: 0,
         target_name,
         parameters: vec![],
+        https: false,
     };
 
     // when
@@ -794,12 +795,13 @@ fn rr_svcb_service() {
     let application_layer_protocol_negotiation = ServiceParameter::ALPN { alpn_ids: vec!["bar".to_string()] };
     let port = ServiceParameter::PORT { port: 8004 };
 
-    let service_binding = SVCB {
+    let service_binding = ServiceBinding {
         name: domain_name,
         ttl: 7200,
         priority: 3,
         target_name,
         parameters: vec![application_layer_protocol_negotiation, port],
+        https: false,
     };
 
     // when
@@ -817,12 +819,13 @@ fn rr_https_alias_default() {
     // given
     let domain_name = DomainName::try_from("example.com").unwrap();
     let target_name = DomainName::try_from("svc.example.net").unwrap();
-    let service_binding = HTTPS {
+    let service_binding = ServiceBinding {
         name: domain_name,
         ttl: 7200,
         priority: 0, // alias mode
         target_name,
         parameters: vec![],
+        https: true,
     };
 
     // when
@@ -840,12 +843,13 @@ fn rr_https_alias_alternative_port() {
     // given
     let domain_name = DomainName::try_from("_8443._https.example.com").unwrap();
     let target_name = DomainName::try_from("svc.example.net").unwrap();
-    let service_binding = HTTPS {
+    let service_binding = ServiceBinding {
         name: domain_name,
         ttl: 7200,
         priority: 0, // alias mode
         target_name,
         parameters: vec![],
+        https: true,
     };
 
     // when
@@ -864,12 +868,13 @@ fn rr_https_quic_to_udp() {
     let target_name = DomainName::try_from("svc3.example.net").unwrap();
     let application_layer_protocol_negotiation = ServiceParameter::ALPN { alpn_ids: vec!["h3".to_string()] };
     let port = ServiceParameter::PORT { port: 8003 };
-    let service_binding = HTTPS {
+    let service_binding = ServiceBinding {
         name: domain_name,
         ttl: 7200,
         priority: 2,
         target_name,
         parameters: vec![application_layer_protocol_negotiation, port],
+        https: true,
     };
 
     // when
@@ -888,12 +893,13 @@ fn rr_https_h2_to_tcp() {
     let target_name = DomainName::try_from("svc2.example.net").unwrap();
     let application_layer_protocol_negotiation = ServiceParameter::ALPN { alpn_ids: vec!["h2".to_string()] };
     let port = ServiceParameter::PORT { port: 8002 };
-    let service_binding = HTTPS {
+    let service_binding = ServiceBinding {
         name: domain_name,
         ttl: 7200,
         priority: 3,
         target_name,
         parameters: vec![application_layer_protocol_negotiation, port],
+        https: true,
     };
 
     // when

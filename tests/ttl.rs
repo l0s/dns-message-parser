@@ -1,8 +1,8 @@
 use dns_message_parser::rr::{
     AFSDBSubtype, Class, ISDNAddress, PSDNAddress, SSHFPAlgorithm, SSHFPType, A, AAAA, AFSDB,
     CNAME, DNAME, EID, EUI48, EUI64, GPOS, HINFO, ISDN, KX, L32, L64, LP, MB, MD, MF, MG, MINFO,
-    MR, MX, NID, NIMLOC, NS, OPT, PTR, PX, RP, RR, RT, SA, SOA, SRV, SSHFP, TXT, URI, X25, SVCB,
-    HTTPS
+    MR, MX, NID, NIMLOC, NS, OPT, PTR, PX, RP, RR, RT, SA, SOA, SRV, SSHFP, TXT, URI, X25,
+    ServiceBinding,
 };
 use dns_message_parser::DomainName;
 use std::convert::TryFrom;
@@ -583,12 +583,13 @@ fn rr_svcb() {
     // given
     let domain_name = DomainName::try_from("www.example.com").unwrap();
     let target_name = DomainName::try_from("service.example.com").unwrap();
-    let rr = RR::SVCB(SVCB {
+    let rr = RR::SVCB(ServiceBinding {
         name: domain_name,
         ttl: 300,
         priority: 1,
         target_name,
-        parameters: vec![]
+        parameters: vec![],
+        https: false,
     });
 
     // when
@@ -603,12 +604,13 @@ fn rr_https() {
     // given
     let domain_name = DomainName::try_from("www.example.com").unwrap();
     let target_name = DomainName::try_from("service.example.com").unwrap();
-    let rr = RR::HTTPS(HTTPS {
+    let rr = RR::HTTPS(ServiceBinding {
         name: domain_name,
         ttl: 300,
         priority: 1,
         target_name,
-        parameters: vec![]
+        parameters: vec![],
+        https: true,
     });
 
     // when

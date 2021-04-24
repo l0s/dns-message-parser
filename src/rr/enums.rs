@@ -4,7 +4,7 @@ pub use super::{
     RP, RT, SOA, SRV, SSHFP, TXT, URI, WKS, X25,
 };
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use crate::rr::draft_ietf_dnsop_svcb_https::{SVCB, HTTPS};
+use crate::rr::draft_ietf_dnsop_svcb_https::ServiceBinding;
 
 try_from_enum_to_integer! {
     #[repr(u16)]
@@ -287,9 +287,9 @@ pub enum RR {
     DNSKEY(DNSKEY),
     CAA(CAA),
     /// FIXME
-    SVCB(SVCB),
+    SVCB(ServiceBinding),
     /// FIXME
-    HTTPS(HTTPS),
+    HTTPS(ServiceBinding),
 }
 
 impl RR {

@@ -93,4 +93,6 @@ pub enum DecodeError {
     PaddingLength(usize),
     #[error("Could not decode Tag: {0}")]
     TagError(#[from] TagError),
+    #[error("Invalid Service Binding Parameter: {0}")]
+    InvalidServiceBindingParameter(u16),
 }

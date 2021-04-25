@@ -239,7 +239,7 @@ mod tests {
         assert_eq!(result.parameters.len(), 1);
         assert!(matches!(&result.parameters[0],
             ServiceParameter::PRIVATE { number, wire_data, } if *number == 667
-                && String::from_utf8(wire_data.clone()).unwrap() == "hello".to_string()))
+                && String::from_utf8(wire_data.clone()).unwrap() == *"hello"))
     }
 
     /// https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform

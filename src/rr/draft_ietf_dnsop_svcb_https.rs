@@ -3,8 +3,6 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::hash::{Hash, Hasher};
 use std::net::{Ipv4Addr, Ipv6Addr};
 
-use base64;
-
 use crate::rr::draft_ietf_dnsop_svcb_https::ServiceBindingMode::{Alias, Service};
 use crate::rr::{ToType, Type};
 use crate::DomainName;
@@ -59,13 +57,10 @@ impl Display for ServiceBinding {
         )?;
         let mut parameters = self.parameters.clone();
         parameters.sort();
-        parameters
-            .iter()
-            .map(|parameter| -> FmtResult {
-                write!(f, " ")?;
-                parameter.fmt(f)
-            })
-            .collect()
+        parameters.iter().try_for_each(|parameter| -> FmtResult {
+            write!(f, " ")?;
+            parameter.fmt(f)
+        })
     }
 }
 
@@ -79,7 +74,7 @@ impl ServiceBinding {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialOrd)]
+#[derive(Debug, Clone, Eq)]
 pub enum ServiceParameter {
     /// Mandatory keys in this resource record (service mode only)
     MANDATORY {
@@ -126,6 +121,12 @@ impl Hash for ServiceParameter {
     }
 }
 
+impl PartialOrd for ServiceParameter {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl Ord for ServiceParameter {
     fn cmp(&self, other: &Self) -> Ordering {
         self.get_registered_number()
@@ -167,7 +168,7 @@ impl ServiceParameter {
 }
 
 /// Escape backslashes and commas in an ALPN ID
-fn escape_alpn(alpn: &String) -> String {
+fn escape_alpn(alpn: &str) -> String {
     let mut result = String::new();
     for char in alpn.chars() {
         if char == '\\' {
@@ -185,7 +186,7 @@ impl Display for ServiceParameter {
         match self {
             ServiceParameter::MANDATORY { key_ids } => {
                 let mut key_ids = key_ids.clone();
-                key_ids.sort();
+                key_ids.sort_unstable();
                 let mandatory_keys = key_ids
                     .iter()
                     .map(|id| ServiceParameter::id_to_presentation_name(*id))

@@ -39,7 +39,7 @@ impl Encoder {
         match parameter {
             ServiceParameter::MANDATORY { key_ids } => {
                 let mut key_ids = key_ids.clone();
-                key_ids.sort();
+                key_ids.sort_unstable();
                 for key_id in key_ids {
                     self.u16(key_id);
                 }
@@ -104,7 +104,7 @@ mod tests {
         let domain_name = DomainName::try_from("_8765._baz.api.test").unwrap();
         let target_name = DomainName::try_from("svc4-baz.test").unwrap();
         let service_binding = ServiceBinding {
-            name: domain_name.to_owned(),
+            name: domain_name,
             ttl: 7200,
             priority: 0,
             target_name,
@@ -133,14 +133,14 @@ mod tests {
         let domain_name = DomainName::try_from("example.com").unwrap();
         let target_name = DomainName::try_from("foo.example.com").unwrap();
         let service_binding = ServiceBinding {
-            name: domain_name.to_owned(),
+            name: domain_name,
             ttl: 300,
             priority: 0,
             target_name,
             parameters: vec![],
             https: false,
         };
-        let dns = dns(0xcccd, service_binding.to_owned());
+        let dns = dns(0xcccd, service_binding);
 
         // when
         encoder.dns(&dns).unwrap();

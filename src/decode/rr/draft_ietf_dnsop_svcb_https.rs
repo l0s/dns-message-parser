@@ -6,6 +6,15 @@ use crate::rr::{ServiceBinding, ServiceParameter};
 use super::Header;
 
 impl<'a, 'b: 'a> Decoder<'a, 'b> {
+    /// Decode a Service Binding (SVCB or HTTP) resource record
+    ///
+    /// Preconditions
+    /// * The header and question sections should have already been decoded. Specifically, index of
+    ///   any previously-identified domain names must already be captured.
+    ///
+    /// Parameters
+    /// - `header` - the header that precedes the question section
+    /// - `https` - true for `HTTPS` resource records, false for `SVCB`
     pub(super) fn rr_service_binding(&mut self, header: Header, https: bool) -> DecodeResult<ServiceBinding> {
         let priority = self.u16()?;
         let target_name = self.domain_name()?;
@@ -23,7 +32,7 @@ impl<'a, 'b: 'a> Decoder<'a, 'b> {
                             key_ids.push(value_decoder.u16()?);
                         }
                         ServiceParameter::MANDATORY { key_ids }
-                    },
+                    }
                     1 => {
                         let mut alpn_ids = vec![];
                         while !value_decoder.is_finished()? {
@@ -43,14 +52,12 @@ impl<'a, 'b: 'a> Decoder<'a, 'b> {
                         ServiceParameter::IPV4_HINT { hints }
                     }
                     5 => {
-                        // TODO the RFC does not explicitly state that the length is one octet
-                        // using one octet for consistency with ALPN
-                        let length = value_decoder.u8()?;
-                        let bytes = value_decoder.read(length as usize)?;
-                        let mut config_list_decoder = Decoder::main(bytes);
-                        let config_list = config_list_decoder.vec()?;
-                        config_list_decoder.finished()?;
-                        ServiceParameter::ECH_CONFIG { config_list }
+                        // Note the RFC does not explicitly state that the length is two octets
+                        // "In wire format, the value of the parameter is an ECHConfigList [ECH],
+                        // including the redundant length prefix." - RFC Section 9
+                        let _ = value_decoder.u16()?; // length
+                        let config_list = value_decoder.vec()?;
+                        ServiceParameter::ECH { config_list }
                     }
                     6 => {
                         let mut hints = vec![];
@@ -63,9 +70,7 @@ impl<'a, 'b: 'a> Decoder<'a, 'b> {
                     number => {
                         ServiceParameter::PRIVATE {
                             number,
-                            presentation_key: format!("key{}", number).to_string(), // TODO does presentation key really make sense here?
                             wire_data: value_decoder.vec()?,
-                            presentation_value: None, // FIXME should we Base64 the wire data?
                         }
                     }
                 };
@@ -86,7 +91,6 @@ impl<'a, 'b: 'a> Decoder<'a, 'b> {
             https,
         })
     }
-
 }
 
 #[cfg(test)]
@@ -130,7 +134,7 @@ mod tests {
 
     /// https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
     #[test]
-    fn service_form_use_the_ownername() {
+    fn use_the_ownername() {
         // given
         let mut bytes: Vec<u8> = vec![];
         bytes.extend_from_slice(b"\x00\x01"); // priority
@@ -156,7 +160,7 @@ mod tests {
 
     /// https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
     #[test]
-    fn service_form_port() {
+    fn map_port() {
         // given
         let mut bytes: Vec<u8> = vec![];
         bytes.extend_from_slice(b"\x00\x10"); // priority
@@ -186,7 +190,7 @@ mod tests {
 
     /// https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
     #[test]
-    fn service_form_unregistered_key() {
+    fn unregistered_key() {
         // given
         let mut bytes: Vec<u8> = vec![];
         bytes.extend_from_slice(b"\x00\x01"); // priority
@@ -210,21 +214,45 @@ mod tests {
         assert_eq!(result.ttl, 7200);
         assert_eq!(result.name, DomainName::try_from("test.example.com").unwrap());
         assert_eq!(result.parameters.len(), 1);
-        if let ServiceParameter::PRIVATE { number, presentation_key: _, wire_data: _, presentation_value: _ } = &result.parameters.first().unwrap() {
-            assert_eq!(*number, 667);
-            // assert_eq!(presentation_value.as_ref().unwrap(), "hello");
-            // FIXME should be able to present value as unquoted string
-        } else {
-            assert!(false, "Parameter should be an unregistered key")
-        }
-        // FIXME incorrect presentation of unregistered key values
+        assert!(matches!(&result.parameters[0],
+            ServiceParameter::PRIVATE { number, wire_data, } if *number == 667
+                && String::from_utf8(wire_data.clone()).unwrap() == "hello".to_string()))
     }
-
-    // TODO: 1 foo.example.com. key667="hello\210qoo"
 
     /// https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
     #[test]
-    fn service_form_ipv6_hints() {
+    fn unregistered_key_escaped_value() {
+        // given
+        let mut bytes: Vec<u8> = vec![];
+        bytes.extend_from_slice(b"\x00\x01"); // priority
+        bytes.extend_from_slice(b"\x03foo\x07example\x03com\x00"); // target
+        bytes.extend_from_slice(b"\x02\x9b"); // key 667 (unregistered)
+        bytes.extend_from_slice(b"\x00\x09"); // value length: 9 bytes (2 octets)
+        bytes.extend_from_slice(b"hello\xd2qoo"); // value
+        let mut decoder = Decoder::main(Bytes::from(bytes));
+        let header = Header {
+            domain_name: DomainName::try_from("test.example.com").unwrap(),
+            class: 1,
+            ttl: 7200,
+        };
+
+        // when
+        let result = decoder.rr_service_binding(header, false).unwrap();
+
+        // then
+        assert_eq!(result.priority, 1);
+        assert_eq!(result.target_name, DomainName::try_from("foo.example.com").unwrap());
+        assert_eq!(result.ttl, 7200);
+        assert_eq!(result.name, DomainName::try_from("test.example.com").unwrap());
+        assert_eq!(result.parameters.len(), 1);
+        assert!(matches!(&result.parameters[0],
+            ServiceParameter::PRIVATE { number, wire_data, } if *number == 667
+                && wire_data.as_slice() == b"hello\xd2qoo"));
+    }
+
+    /// https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
+    #[test]
+    fn ipv6_hints() {
         // given
         let mut bytes: Vec<u8> = vec![];
         bytes.extend_from_slice(b"\x00\x01"); // priority
@@ -249,20 +277,15 @@ mod tests {
         assert_eq!(result.ttl, 7200);
         assert_eq!(result.name, DomainName::try_from("test.example.com").unwrap());
         assert_eq!(result.parameters.len(), 1);
-        if let ServiceParameter::IPV6_HINT { hints } = &result.parameters[0] {
-            assert_eq!(hints.len(), 2);
-            assert_eq!(hints[0].to_string(), "2001:db8::1".to_string());
-            assert_eq!(hints[1].to_string(), "2001:db8::53:1".to_string());
-        } else {
-            assert!(false, "Parameter should be an IPv6 hint.");
-        }
-        // FIXME not quoting the IPv6 hints
-        // assert!(result.to_string().ends_with("1 foo.example.com. ipv6hint=\"2001:db8::1,2001:db8::53:1\""));
+        assert!(matches!(&result.parameters[0],
+            ServiceParameter::IPV6_HINT { hints } if hints.len() == 2
+                && hints[0] == Ipv6Addr::from_str("2001:db8::1").unwrap()
+                && hints[1] == Ipv6Addr::from_str("2001:db8::53:1").unwrap()));
     }
 
     /// https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
     #[test]
-    fn service_form_ipv6_in_ipv4_mapped_ipv6_format() {
+    fn ipv6_in_ipv4_mapped_ipv6_format() {
         // given
         let mut bytes: Vec<u8> = vec![];
         bytes.extend_from_slice(b"\x00\x01"); // priority
@@ -286,19 +309,13 @@ mod tests {
         assert_eq!(result.ttl, 7200);
         assert_eq!(result.name, DomainName::try_from("test.example.com").unwrap());
         assert_eq!(result.parameters.len(), 1);
-        if let ServiceParameter::IPV6_HINT { hints } = &result.parameters[0] {
-            assert_eq!(hints.len(), 1);
-            assert_eq!(hints[0], Ipv6Addr::from_str("2001:db8:ffff:ffff:ffff:ffff:198.51.100.100").unwrap());
-        } else {
-            assert!(false, "Parameter should be an IPv6 hint.");
-        }
-        // FIXME not quoting the IPv6 hints
-        // assert!(result.to_string().ends_with("1 foo.example.com. ipv6hint=\"2001:db8::1,2001:db8::53:1\""));
+        assert!(matches!(&result.parameters[0],
+             ServiceParameter::IPV6_HINT { hints } if hints.len() == 1 && hints[0] == Ipv6Addr::from_str("2001:db8:ffff:ffff:ffff:ffff:198.51.100.100").unwrap()))
     }
 
     /// https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
     #[test]
-    fn service_form_multiple_parameters() {
+    fn multiple_parameters() {
         // given
         let mut bytes: Vec<u8> = vec![];
         bytes.extend_from_slice(b"\x00\x10"); // priority
@@ -341,7 +358,7 @@ mod tests {
 
     /// https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
     #[test]
-    fn service_form_escaped_presentation_format() {
+    fn escaped_presentation_format() {
         let mut bytes: Vec<u8> = vec![];
         bytes.extend_from_slice(b"\x00\x10"); // priority
         bytes.extend_from_slice(b"\x03foo\x07example\x03org\x00"); // target

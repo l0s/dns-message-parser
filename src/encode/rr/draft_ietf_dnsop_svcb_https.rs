@@ -51,10 +51,13 @@ impl Encoder {
                     self.ipv4_addr(hint);
                 }
             }
-            ServiceParameter::ECH_CONFIG { config_list } => {
+            ServiceParameter::ECH { config_list } => {
                 if config_list.len() > u16::MAX as usize {
                     return Err(EncodeError::Length(config_list.len()));
                 }
+                // Note the RFC does not explicitly state that the length is two octets
+                // "In wire format, the value of the parameter is an ECHConfigList [ECH],
+                // including the redundant length prefix." - RFC Section 9
                 self.u16(config_list.len() as u16);
                 self.vec(config_list);
             }
@@ -63,7 +66,7 @@ impl Encoder {
                     self.ipv6_addr(hint);
                 }
             }
-            ServiceParameter::PRIVATE { number: _, presentation_key: _, wire_data, presentation_value: _ } => {
+            ServiceParameter::PRIVATE { number: _, wire_data, } => {
                 self.vec(wire_data);
             }
             ServiceParameter::KEY_65535 => {}
@@ -216,9 +219,7 @@ mod tests {
             parameters: vec![
                 ServiceParameter::PRIVATE {
                     number: 667,
-                    presentation_key: "".to_string(),
                     wire_data: b"hello".to_vec(),
-                    presentation_value: None
                 },
             ],
             https: false,
@@ -256,9 +257,7 @@ mod tests {
             parameters: vec![
                 ServiceParameter::PRIVATE {
                     number: 667,
-                    presentation_key: "".to_string(),
                     wire_data: b"hello\xd2qoo".to_vec(),
-                    presentation_value: None
                 },
             ],
             https: false,

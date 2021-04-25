@@ -1,11 +1,13 @@
+use std::cmp::Ordering;
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::hash::{Hash, Hasher};
 use std::net::{Ipv4Addr, Ipv6Addr};
 
+use base64;
+
 use crate::DomainName;
-use crate::rr::draft_ietf_dnsop_svcb_https::ServiceBindingMode::{Alias, Service};
 use crate::rr::{ToType, Type};
-use std::cmp::Ordering;
-use std::hash::{Hash, Hasher};
+use crate::rr::draft_ietf_dnsop_svcb_https::ServiceBindingMode::{Alias, Service};
 
 /// A Service Binding record for locating alternative endpoints for a service.
 ///
@@ -54,7 +56,9 @@ impl Display for ServiceBinding {
         write!(f,
                "{} {} IN {} {} {}",
                self.name, self.ttl, record_type, self.priority, self.target_name)?;
-        self.parameters.iter().map(|parameter| -> FmtResult {
+        let mut parameters = self.parameters.clone();
+        parameters.sort();
+        parameters.iter().map(|parameter| -> FmtResult {
             write!(f, " ")?;
             parameter.fmt(f)
         }).collect()
@@ -93,18 +97,16 @@ pub enum ServiceParameter {
     PORT { port: u16 },
     /// IPv4 address hints
     IPV4_HINT { hints: Vec<Ipv4Addr> },
-    /// Encrypted ClientHello information
-    /// FIXME this has been renamed to "ech"
-    /// TODO: refer to section 9 in the RFC
-    ECH_CONFIG { config_list: Vec<u8> },
+    /// Encrypted ClientHello information (RFC Section 9)
+    ///
+    /// This conveys the ECH configuration of an alternative endpoint.
+    ECH { config_list: Vec<u8> },
     /// IPv6 address hints
     IPV6_HINT { hints: Vec<Ipv6Addr> },
     /// Private use keys 65280-65534
     PRIVATE {
         number: u16,
-        presentation_key: String,
         wire_data: Vec<u8>,
-        presentation_value: Option<String>,
     },
     /// Reserved ("Invalid key")
     KEY_65535,
@@ -136,15 +138,11 @@ impl ServiceParameter {
             ServiceParameter::NO_DEFAULT_ALPN => 2,
             ServiceParameter::PORT { .. } => 3,
             ServiceParameter::IPV4_HINT { .. } => 4,
-            ServiceParameter::ECH_CONFIG { .. } => 5,
+            ServiceParameter::ECH { .. } => 5,
             ServiceParameter::IPV6_HINT { .. } => 6,
-            ServiceParameter::PRIVATE { number, presentation_key: _, wire_data: _, presentation_value: _ } => *number,
+            ServiceParameter::PRIVATE { number, wire_data: _, } => *number,
             ServiceParameter::KEY_65535 => 65535,
         }
-    }
-
-    pub fn get_presentation_name(&self) -> String {
-        ServiceParameter::id_to_presentation_name(self.get_registered_number())
     }
 
     fn id_to_presentation_name(id: u16) -> String {
@@ -162,7 +160,22 @@ impl ServiceParameter {
     }
 }
 
+/// Escape backslashes and commas in an ALPN ID
+fn escape_alpn(alpn: &String) -> String {
+    let mut result = String::new();
+    for char in alpn.chars() {
+        if char == '\\' {
+            result.push_str("\\\\\\");
+        } else if char == ',' {
+            result.push('\\');
+        }
+        result.push(char);
+    }
+    result
+}
+
 impl Display for ServiceParameter {
+
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             ServiceParameter::MANDATORY { key_ids } => {
@@ -176,38 +189,67 @@ impl Display for ServiceParameter {
                 write!(f, "mandatory={}", mandatory_keys)
             }
             ServiceParameter::ALPN { alpn_ids } => {
-                write!(f, "{}={}", self.get_presentation_name(), alpn_ids.join(","))
+                let mut escape = false;
+                let mut escaped_ids = vec![];
+                for id in alpn_ids {
+                    let escaped = escape_alpn(id);
+                    if escaped != *id {
+                        escape |= true;
+                    }
+                    escaped_ids.push(escaped);
+                }
+                let value = escaped_ids.join(",");
+                if escape {
+                    write!(f, "alpn=\"{}\"", value)
+                } else {
+                    write!(f, "alpn={}", value)
+                }
             }
-            ServiceParameter::NO_DEFAULT_ALPN => write!(f, "{}", self.get_presentation_name()),
-            ServiceParameter::PORT { port } => write!(f, "{}={}", self.get_presentation_name(), port),
+            ServiceParameter::NO_DEFAULT_ALPN => write!(f, "no-default-alpn"),
+            ServiceParameter::PORT { port } => write!(f, "port={}", port),
             ServiceParameter::IPV4_HINT { hints } => {
                 write!(f,
-                       "{}={}",
-                       self.get_presentation_name(),
+                       "ipv4hint={}",
                        hints.iter()
                            .map(|hint| hint.to_string())
                            .collect::<Vec<String>>()
                            .join(","))
             }
-            ServiceParameter::ECH_CONFIG { config_list: _ } => {
-                todo!()
+            ServiceParameter::ECH { config_list } => {
+                write!(f, "ech={}", base64::encode(config_list))
             }
             ServiceParameter::IPV6_HINT { hints } => {
                 write!(f,
-                       "{}={}",
-                       self.get_presentation_name(),
+                       "ipv6hint=\"{}\"",
                        hints.iter()
                            .map(|hint| hint.to_string())
                            .collect::<Vec<String>>()
                            .join(","))
             }
-            ServiceParameter::PRIVATE { number: _, presentation_key: _, wire_data: _, presentation_value } => {
-                match presentation_value {
-                    None => write!(f, "{}", self.get_presentation_name()),
-                    Some(value) => write!(f, "{}={}", self.get_presentation_name(), value),
+            ServiceParameter::PRIVATE { number, wire_data, } => {
+                let key = format!("key{}", number);
+                let value = String::from_utf8(wire_data.clone());
+                if let Ok(value) = value {
+                    write!(f, "{}={}", key, value)
+                } else {
+                    let mut escaped = vec![];
+                    for byte in wire_data {
+                        if *byte < b'0' || (*byte > b'9' && *byte < b'A')
+                            || (*byte > b'Z' && *byte < b'a')
+                            || *byte > b'z' {
+                            escaped.extend_from_slice(format!("\\{}", *byte).as_bytes());
+                        } else {
+                            escaped.push(*byte);
+                        }
+                    }
+                    if let Ok(value) = String::from_utf8(escaped) {
+                        write!(f, "{}=\"{}\"", key, value)
+                    } else {
+                        write!(f, "{}=\"{}\"", key, base64::encode(wire_data))
+                    }
                 }
             }
-            ServiceParameter::KEY_65535 => write!(f, "{}", self.get_presentation_name()),
+            ServiceParameter::KEY_65535 => write!(f, "reserved"),
         }
     }
 }
@@ -215,57 +257,263 @@ impl Display for ServiceParameter {
 #[cfg(test)]
 mod tests {
     use std::convert::TryFrom;
+    use std::net::{Ipv6Addr, Ipv4Addr};
+    use std::str::FromStr;
 
-    use crate::{Dns, DomainName, Flags, Opcode, RCode};
-    use crate::question::{QClass, QType, Question};
-    use crate::rr::{RR, ServiceBinding};
+    use crate::DomainName;
+    use crate::rr::{ServiceBinding, ServiceParameter};
 
+    /// Example from: https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#aliasform
     #[test]
-    fn encode_decode_alias() {
+    fn alias_form() {
         // given
-        let domain_name = DomainName::try_from("_8443._foo.api.example.com").unwrap();
-        let target_name = DomainName::try_from("svc4.example.net").unwrap();
-
-        let binding = ServiceBinding {
-            name: domain_name.to_owned(),
+        let domain_name = DomainName::try_from("example.com").unwrap();
+        let target_name = DomainName::try_from("foo.example.com").unwrap();
+        let service_binding = ServiceBinding {
+            name: domain_name,
             ttl: 7200,
-            priority: 0,
+            priority: 0, // alias
             target_name,
             parameters: vec![],
-            https: false,
-        };
-        let dns = Dns {
-            id: 0xeced,
-            flags: Flags {
-                qr: true,
-                opcode: Opcode::Query,
-                aa: false,
-                tc: false,
-                rd: false,
-                ra: false,
-                ad: false,
-                cd: false,
-                rcode: RCode::NoError,
-            },
-            questions: vec![
-                Question {
-                    domain_name,
-                    q_class: QClass::IN,
-                    q_type: QType::SVCB,
-                }
-            ],
-            answers: vec![
-                RR::SVCB(binding),
-            ],
-            authorities: vec![],
-            additionals: vec![],
+            https: true,
         };
 
         // when
-        let encoded = dns.encode().unwrap();
+        let result = service_binding.to_string();
 
         // then
-        let decoded = Dns::decode(encoded.freeze()).unwrap();
-        assert_eq!(dns.to_string(), decoded.to_string());
+        assert_eq!(result, "example.com. 7200 IN HTTPS 0 foo.example.com.".to_string());
+    }
+
+    /// Example from: https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
+    #[test]
+    fn use_the_ownername() {
+        // given
+        let domain_name = DomainName::try_from("example.com").unwrap();
+        let target_name = DomainName::default();
+        let service_binding = ServiceBinding {
+            name: domain_name,
+            ttl: 300,
+            priority: 1,
+            target_name,
+            parameters: vec![],
+            https: false
+        };
+
+        // when
+        let result = service_binding.to_string();
+
+        // then
+        assert_eq!(result, "example.com. 300 IN SVCB 1 .");
+    }
+
+    /// Example from: https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
+    #[test]
+    fn map_port() {
+        // given
+        let domain_name = DomainName::try_from("example.com").unwrap();
+        let target_name = DomainName::try_from("foo.example.com").unwrap();
+        let service_binding = ServiceBinding {
+            name: domain_name,
+            ttl: 7200,
+            priority: 16,
+            target_name,
+            parameters: vec![
+                ServiceParameter::PORT { port: 53 },
+            ],
+            https: true,
+        };
+
+        // when
+        let result = service_binding.to_string();
+
+        // then
+        assert_eq!(result, "example.com. 7200 IN HTTPS 16 foo.example.com. port=53");
+    }
+
+    /// Example from: https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
+    #[test]
+    fn unregistered_key_value() {
+        // given
+        let domain_name = DomainName::try_from("example.com").unwrap();
+        let target_name = DomainName::try_from("foo.example.com").unwrap();
+        let service_binding = ServiceBinding {
+            name: domain_name,
+            ttl: 300,
+            priority: 1,
+            target_name,
+            parameters: vec![
+                ServiceParameter::PRIVATE {
+                    number: 667,
+                    wire_data: b"hello".to_vec()
+                },
+            ],
+            https: false,
+        };
+
+        // when
+        let result = service_binding.to_string();
+
+        // then
+        assert_eq!(result, "example.com. 300 IN SVCB 1 foo.example.com. key667=hello");
+    }
+
+    /// Example from: https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
+    #[test]
+    fn unregistered_key_escaped_value() {
+        // given
+        let domain_name = DomainName::try_from("example.com").unwrap();
+        let target_name = DomainName::try_from("foo.example.com").unwrap();
+        let service_binding = ServiceBinding {
+            name: domain_name,
+            ttl: 300,
+            priority: 1,
+            target_name,
+            parameters: vec![
+                ServiceParameter::PRIVATE {
+                    number: 667,
+                    wire_data: b"hello\xd2qoo".to_vec()
+                },
+            ],
+            https: true,
+        };
+
+        // when
+        let result = service_binding.to_string();
+
+        // then
+        assert_eq!(result,
+                   "example.com. 300 IN HTTPS 1 foo.example.com. key667=\"hello\\210qoo\"");
+    }
+
+    /// Example from: https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
+    #[test]
+    fn ipv6_hints() {
+        // given
+        let domain_name = DomainName::try_from("example.com").unwrap();
+        let target_name = DomainName::try_from("foo.example.com").unwrap();
+        let service_binding = ServiceBinding {
+            name: domain_name,
+            ttl: 7200,
+            priority: 1,
+            target_name,
+            parameters: vec![
+                ServiceParameter::IPV6_HINT {
+                    hints: vec![
+                        Ipv6Addr::from_str("2001:db8::1").unwrap(),
+                        Ipv6Addr::from_str("2001:db8::53:1").unwrap(),
+                    ],
+                }
+            ],
+            https: false
+        };
+
+        // when
+        let result = service_binding.to_string();
+
+        // then
+        assert_eq!(result,
+                   "example.com. 7200 IN SVCB 1 foo.example.com. ipv6hint=\"2001:db8::1,2001:db8::53:1\"");
+    }
+
+    /// Example from: https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
+    #[test]
+    fn ipv6_hint_in_ipv4_mapped_ipv6_format() {
+        // given
+        let domain_name = DomainName::try_from("example.com").unwrap();
+        let target_name = DomainName::try_from("foo.example.com").unwrap();
+        let service_binding = ServiceBinding {
+            name: domain_name,
+            ttl: 300,
+            priority: 1,
+            target_name,
+            parameters: vec![
+                ServiceParameter::IPV6_HINT {
+                    hints: vec![
+                        Ipv6Addr::from_str("2001:db8:ffff:ffff:ffff:ffff:198.51.100.100").unwrap(),
+                    ],
+                }
+            ],
+            https: true,
+        };
+
+        // when
+        let result = service_binding.to_string();
+
+        // then
+        // note IPv6 display rules are already well-defined so not changing that here
+        // this behaviour conforms to the robustness principle
+        assert_eq!(result,
+                   "example.com. 300 IN HTTPS 1 foo.example.com. ipv6hint=\"2001:db8:ffff:ffff:ffff:ffff:c633:6464\"");
+    }
+
+    /// Example from: https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
+    #[test]
+    fn multiple_parameters_in_wrong_order() {
+        // given
+        let domain_name = DomainName::try_from("example.org").unwrap();
+        let target_name = DomainName::try_from("foo.example.org").unwrap();
+        let service_binding = ServiceBinding {
+            name: domain_name,
+            ttl: 7200,
+            priority: 16,
+            target_name,
+            parameters: vec![
+                // the parameters are deliberately specified in the wrong order
+                // they will be sorted correctly in the presentation format
+                ServiceParameter::ALPN {
+                    alpn_ids: vec![
+                        "h2".to_string(),
+                        "h3-19".to_string(),
+                    ]
+                },
+                ServiceParameter::MANDATORY {
+                    key_ids: vec![ 4, 1 ], // ipv4hint and alpn are mandatory
+                },
+                ServiceParameter::IPV4_HINT {
+                    hints: vec![
+                        Ipv4Addr::from_str("192.0.2.1").unwrap(),
+                    ],
+                },
+            ],
+            https: false,
+        };
+
+        // when
+        let result = service_binding.to_string();
+
+        // then
+        assert_eq!(result,
+                   "example.org. 7200 IN SVCB 16 foo.example.org. mandatory=alpn,ipv4hint alpn=h2,h3-19 ipv4hint=192.0.2.1");
+    }
+
+    /// Example from: https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
+    #[test]
+    fn alpn_with_escaped_values() {
+        // given
+        let domain_name = DomainName::try_from("example.org").unwrap();
+        let target_name = DomainName::try_from("foo.example.org").unwrap();
+        let service_binding = ServiceBinding {
+            name: domain_name,
+            ttl: 300,
+            priority: 16,
+            target_name,
+            parameters: vec![
+                ServiceParameter::ALPN {
+                    alpn_ids: vec![
+                        "f\\oo,bar".to_string(),
+                        "h2".to_string(),
+                    ]
+                },
+            ],
+            https: true,
+        };
+
+        // when
+        let result = service_binding.to_string();
+
+        // then
+        assert_eq!(result,
+                   "example.org. 300 IN HTTPS 16 foo.example.org. alpn=\"f\\\\\\\\oo\\,bar,h2\"");
     }
 }

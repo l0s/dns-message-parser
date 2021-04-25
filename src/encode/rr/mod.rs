@@ -1,5 +1,6 @@
 #[macro_use]
 mod macros;
+mod draft_ietf_dnsop_svcb_https;
 mod edns;
 mod enums;
 mod rfc_1035;
@@ -21,4 +22,3 @@ mod rfc_7553;
 mod rfc_8659;
 mod subtypes;
 mod unknown;
-mod draft_ietf_dnsop_svcb_https;

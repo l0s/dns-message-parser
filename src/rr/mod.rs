@@ -44,6 +44,7 @@
 
 #[macro_use]
 mod macros;
+mod draft_ietf_dnsop_svcb_https;
 pub mod edns;
 mod enums;
 mod rfc_1035;
@@ -65,8 +66,8 @@ mod rfc_7553;
 mod rfc_8659;
 mod subtypes;
 mod unknown;
-mod draft_ietf_dnsop_svcb_https;
 
+pub use draft_ietf_dnsop_svcb_https::{ServiceBinding, ServiceBindingMode, ServiceParameter};
 pub use edns::rfc_6891::OPT;
 pub use enums::{Class, ToType, Type, RR};
 pub use rfc_1035::{A, CNAME, HINFO, MB, MD, MF, MG, MINFO, MR, MX, NS, NULL, PTR, SOA, TXT, WKS};
@@ -93,6 +94,3 @@ pub use rfc_7553::URI;
 pub use rfc_8659::{Tag, TagError, CAA};
 pub use subtypes::{Address, AddressError, AddressFamilyNumber};
 pub use unknown::{EID, NIMLOC};
-pub use draft_ietf_dnsop_svcb_https::{
-    ServiceBinding, ServiceParameter, ServiceBindingMode
-};

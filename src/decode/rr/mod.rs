@@ -1,5 +1,6 @@
 #[macro_use]
 mod macros;
+mod draft_ietf_dnsop_svcb_https;
 mod edns;
 mod enums;
 mod rfc_1035;
@@ -23,6 +24,5 @@ mod subtypes;
 #[cfg(test)]
 mod tests;
 mod unknown;
-mod draft_ietf_dnsop_svcb_https;
 
 use enums::Header;

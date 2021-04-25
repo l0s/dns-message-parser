@@ -2,9 +2,9 @@ use dns_message_parser::question::{QClass, QType, Question};
 use dns_message_parser::rr::edns::{Cookie, EDNSOption, Padding, ECS};
 use dns_message_parser::rr::{
     APItem, Address, AlgorithmType, Class, DigestType, ISDNAddress, PSDNAddress, SSHFPAlgorithm,
-    SSHFPType, Tag, A, AAAA, APL, CAA, CNAME, DNAME, DNSKEY, DS, EID, EUI48, EUI64, GPOS, HINFO,
-    ISDN, KX, L32, L64, LP, MB, MD, MF, MG, MINFO, MR, MX, NID, NIMLOC, NS, OPT, PTR, PX, RP, RR,
-    RT, SA, SOA, SRV, SSHFP, TXT, URI, X25, ServiceBinding, ServiceParameter,
+    SSHFPType, ServiceBinding, ServiceParameter, Tag, A, AAAA, APL, CAA, CNAME, DNAME, DNSKEY, DS,
+    EID, EUI48, EUI64, GPOS, HINFO, ISDN, KX, L32, L64, LP, MB, MD, MF, MG, MINFO, MR, MX, NID,
+    NIMLOC, NS, OPT, PTR, PX, RP, RR, RT, SA, SOA, SRV, SSHFP, TXT, URI, X25,
 };
 use dns_message_parser::{Dns, DomainName, Flags, Opcode, RCode};
 use std::convert::TryFrom;
@@ -784,7 +784,10 @@ fn rr_svcb_alias() {
     let rr = RR::SVCB(service_binding);
 
     // then
-    check_output(&rr, "_8443._foo.api.example.com. 7200 IN SVCB 0 svc4.example.net.");
+    check_output(
+        &rr,
+        "_8443._foo.api.example.com. 7200 IN SVCB 0 svc4.example.net.",
+    );
 }
 
 #[test]
@@ -792,7 +795,9 @@ fn rr_svcb_service() {
     // given
     let domain_name = DomainName::try_from("svc4.example.net.").unwrap();
     let target_name = DomainName::try_from("svc4.example.net.").unwrap();
-    let application_layer_protocol_negotiation = ServiceParameter::ALPN { alpn_ids: vec!["bar".to_string()] };
+    let application_layer_protocol_negotiation = ServiceParameter::ALPN {
+        alpn_ids: vec!["bar".to_string()],
+    };
     let port = ServiceParameter::PORT { port: 8004 };
 
     let service_binding = ServiceBinding {
@@ -808,7 +813,10 @@ fn rr_svcb_service() {
     let rr = RR::SVCB(service_binding);
 
     // then
-    check_output(&rr, "svc4.example.net. 7200 IN SVCB 3 svc4.example.net. alpn=bar port=8004");
+    check_output(
+        &rr,
+        "svc4.example.net. 7200 IN SVCB 3 svc4.example.net. alpn=bar port=8004",
+    );
 }
 
 /// Test alias mode for default `https://` and `http://` on ports 443 and 80 respectively.
@@ -856,7 +864,10 @@ fn rr_https_alias_alternative_port() {
     let rr = RR::HTTPS(service_binding);
 
     // then
-    check_output(&rr, "_8443._https.example.com. 7200 IN HTTPS 0 svc.example.net.");
+    check_output(
+        &rr,
+        "_8443._https.example.com. 7200 IN HTTPS 0 svc.example.net.",
+    );
 }
 
 /// Example from:
@@ -866,7 +877,9 @@ fn rr_https_quic_to_udp() {
     // given
     let domain_name = DomainName::try_from("svc.example.net").unwrap();
     let target_name = DomainName::try_from("svc3.example.net").unwrap();
-    let application_layer_protocol_negotiation = ServiceParameter::ALPN { alpn_ids: vec!["h3".to_string()] };
+    let application_layer_protocol_negotiation = ServiceParameter::ALPN {
+        alpn_ids: vec!["h3".to_string()],
+    };
     let port = ServiceParameter::PORT { port: 8003 };
     let service_binding = ServiceBinding {
         name: domain_name,
@@ -881,7 +894,10 @@ fn rr_https_quic_to_udp() {
     let rr = RR::HTTPS(service_binding);
 
     // then
-    check_output(&rr, "svc.example.net. 7200 IN HTTPS 2 svc3.example.net. alpn=h3 port=8003");
+    check_output(
+        &rr,
+        "svc.example.net. 7200 IN HTTPS 2 svc3.example.net. alpn=h3 port=8003",
+    );
 }
 
 /// Example from:
@@ -891,7 +907,9 @@ fn rr_https_h2_to_tcp() {
     // given
     let domain_name = DomainName::try_from("svc.example.net").unwrap();
     let target_name = DomainName::try_from("svc2.example.net").unwrap();
-    let application_layer_protocol_negotiation = ServiceParameter::ALPN { alpn_ids: vec!["h2".to_string()] };
+    let application_layer_protocol_negotiation = ServiceParameter::ALPN {
+        alpn_ids: vec!["h2".to_string()],
+    };
     let port = ServiceParameter::PORT { port: 8002 };
     let service_binding = ServiceBinding {
         name: domain_name,
@@ -906,7 +924,10 @@ fn rr_https_h2_to_tcp() {
     let rr = RR::HTTPS(service_binding);
 
     // then
-    check_output(&rr, "svc.example.net. 7200 IN HTTPS 3 svc2.example.net. alpn=h2 port=8002");
+    check_output(
+        &rr,
+        "svc.example.net. 7200 IN HTTPS 3 svc2.example.net. alpn=h2 port=8002",
+    );
 }
 
 #[test]

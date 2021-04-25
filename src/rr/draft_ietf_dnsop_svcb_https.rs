@@ -5,9 +5,9 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 
 use base64;
 
-use crate::DomainName;
-use crate::rr::{ToType, Type};
 use crate::rr::draft_ietf_dnsop_svcb_https::ServiceBindingMode::{Alias, Service};
+use crate::rr::{ToType, Type};
+use crate::DomainName;
 
 /// A Service Binding record for locating alternative endpoints for a service.
 ///
@@ -17,7 +17,6 @@ pub struct ServiceBinding {
     pub ttl: u32,
 
     // The class is always IN (Internet, 0x0001)
-
     /// The `SvcPriority` field, a value between 0 and 65535
     /// SVCB resource records with a smaller priority SHOULD be given priority over resource records
     /// with a larger value.
@@ -53,15 +52,20 @@ pub enum ServiceBindingMode {
 impl Display for ServiceBinding {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         let record_type = if self.https { "HTTPS" } else { "SVCB" };
-        write!(f,
-               "{} {} IN {} {} {}",
-               self.name, self.ttl, record_type, self.priority, self.target_name)?;
+        write!(
+            f,
+            "{} {} IN {} {} {}",
+            self.name, self.ttl, record_type, self.priority, self.target_name
+        )?;
         let mut parameters = self.parameters.clone();
         parameters.sort();
-        parameters.iter().map(|parameter| -> FmtResult {
-            write!(f, " ")?;
-            parameter.fmt(f)
-        }).collect()
+        parameters
+            .iter()
+            .map(|parameter| -> FmtResult {
+                write!(f, " ")?;
+                parameter.fmt(f)
+            })
+            .collect()
     }
 }
 
@@ -81,12 +85,12 @@ pub enum ServiceParameter {
     MANDATORY {
         /// the key IDs the client must support in order for this resource record to function properly
         /// RFC section 7
-        key_ids: Vec<u16>
+        key_ids: Vec<u16>,
     },
     /// Additional supported protocols
     ALPN {
         /// The default set of ALPNs, which SHOULD NOT be empty, e.g. "h3", "h2", "http/1.1".
-        alpn_ids: Vec<String>
+        alpn_ids: Vec<String>,
     },
     /// No support for default protocol
     ///
@@ -104,17 +108,15 @@ pub enum ServiceParameter {
     /// IPv6 address hints
     IPV6_HINT { hints: Vec<Ipv6Addr> },
     /// Private use keys 65280-65534
-    PRIVATE {
-        number: u16,
-        wire_data: Vec<u8>,
-    },
+    PRIVATE { number: u16, wire_data: Vec<u8> },
     /// Reserved ("Invalid key")
     KEY_65535,
 }
 
 impl PartialEq for ServiceParameter {
     fn eq(&self, other: &Self) -> bool {
-        self.get_registered_number().eq(&other.get_registered_number())
+        self.get_registered_number()
+            .eq(&other.get_registered_number())
     }
 }
 
@@ -126,7 +128,8 @@ impl Hash for ServiceParameter {
 
 impl Ord for ServiceParameter {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.get_registered_number().cmp(&other.get_registered_number())
+        self.get_registered_number()
+            .cmp(&other.get_registered_number())
     }
 }
 
@@ -140,7 +143,10 @@ impl ServiceParameter {
             ServiceParameter::IPV4_HINT { .. } => 4,
             ServiceParameter::ECH { .. } => 5,
             ServiceParameter::IPV6_HINT { .. } => 6,
-            ServiceParameter::PRIVATE { number, wire_data: _, } => *number,
+            ServiceParameter::PRIVATE {
+                number,
+                wire_data: _,
+            } => *number,
             ServiceParameter::KEY_65535 => 65535,
         }
     }
@@ -175,13 +181,13 @@ fn escape_alpn(alpn: &String) -> String {
 }
 
 impl Display for ServiceParameter {
-
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             ServiceParameter::MANDATORY { key_ids } => {
                 let mut key_ids = key_ids.clone();
                 key_ids.sort();
-                let mandatory_keys = key_ids.iter()
+                let mandatory_keys = key_ids
+                    .iter()
                     .map(|id| ServiceParameter::id_to_presentation_name(*id))
                     .collect::<Vec<String>>()
                     .join(",");
@@ -208,25 +214,31 @@ impl Display for ServiceParameter {
             ServiceParameter::NO_DEFAULT_ALPN => write!(f, "no-default-alpn"),
             ServiceParameter::PORT { port } => write!(f, "port={}", port),
             ServiceParameter::IPV4_HINT { hints } => {
-                write!(f,
-                       "ipv4hint={}",
-                       hints.iter()
-                           .map(|hint| hint.to_string())
-                           .collect::<Vec<String>>()
-                           .join(","))
+                write!(
+                    f,
+                    "ipv4hint={}",
+                    hints
+                        .iter()
+                        .map(|hint| hint.to_string())
+                        .collect::<Vec<String>>()
+                        .join(",")
+                )
             }
             ServiceParameter::ECH { config_list } => {
                 write!(f, "ech={}", base64::encode(config_list))
             }
             ServiceParameter::IPV6_HINT { hints } => {
-                write!(f,
-                       "ipv6hint=\"{}\"",
-                       hints.iter()
-                           .map(|hint| hint.to_string())
-                           .collect::<Vec<String>>()
-                           .join(","))
+                write!(
+                    f,
+                    "ipv6hint=\"{}\"",
+                    hints
+                        .iter()
+                        .map(|hint| hint.to_string())
+                        .collect::<Vec<String>>()
+                        .join(",")
+                )
             }
-            ServiceParameter::PRIVATE { number, wire_data, } => {
+            ServiceParameter::PRIVATE { number, wire_data } => {
                 let key = format!("key{}", number);
                 let value = String::from_utf8(wire_data.clone());
                 if let Ok(value) = value {
@@ -234,9 +246,11 @@ impl Display for ServiceParameter {
                 } else {
                     let mut escaped = vec![];
                     for byte in wire_data {
-                        if *byte < b'0' || (*byte > b'9' && *byte < b'A')
+                        if *byte < b'0'
+                            || (*byte > b'9' && *byte < b'A')
                             || (*byte > b'Z' && *byte < b'a')
-                            || *byte > b'z' {
+                            || *byte > b'z'
+                        {
                             escaped.extend_from_slice(format!("\\{}", *byte).as_bytes());
                         } else {
                             escaped.push(*byte);
@@ -257,11 +271,11 @@ impl Display for ServiceParameter {
 #[cfg(test)]
 mod tests {
     use std::convert::TryFrom;
-    use std::net::{Ipv6Addr, Ipv4Addr};
+    use std::net::{Ipv4Addr, Ipv6Addr};
     use std::str::FromStr;
 
-    use crate::DomainName;
     use crate::rr::{ServiceBinding, ServiceParameter};
+    use crate::DomainName;
 
     /// Example from: https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#aliasform
     #[test]
@@ -282,7 +296,10 @@ mod tests {
         let result = service_binding.to_string();
 
         // then
-        assert_eq!(result, "example.com. 7200 IN HTTPS 0 foo.example.com.".to_string());
+        assert_eq!(
+            result,
+            "example.com. 7200 IN HTTPS 0 foo.example.com.".to_string()
+        );
     }
 
     /// Example from: https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
@@ -297,7 +314,7 @@ mod tests {
             priority: 1,
             target_name,
             parameters: vec![],
-            https: false
+            https: false,
         };
 
         // when
@@ -318,9 +335,7 @@ mod tests {
             ttl: 7200,
             priority: 16,
             target_name,
-            parameters: vec![
-                ServiceParameter::PORT { port: 53 },
-            ],
+            parameters: vec![ServiceParameter::PORT { port: 53 }],
             https: true,
         };
 
@@ -328,7 +343,10 @@ mod tests {
         let result = service_binding.to_string();
 
         // then
-        assert_eq!(result, "example.com. 7200 IN HTTPS 16 foo.example.com. port=53");
+        assert_eq!(
+            result,
+            "example.com. 7200 IN HTTPS 16 foo.example.com. port=53"
+        );
     }
 
     /// Example from: https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
@@ -342,12 +360,10 @@ mod tests {
             ttl: 300,
             priority: 1,
             target_name,
-            parameters: vec![
-                ServiceParameter::PRIVATE {
-                    number: 667,
-                    wire_data: b"hello".to_vec()
-                },
-            ],
+            parameters: vec![ServiceParameter::PRIVATE {
+                number: 667,
+                wire_data: b"hello".to_vec(),
+            }],
             https: false,
         };
 
@@ -355,7 +371,10 @@ mod tests {
         let result = service_binding.to_string();
 
         // then
-        assert_eq!(result, "example.com. 300 IN SVCB 1 foo.example.com. key667=hello");
+        assert_eq!(
+            result,
+            "example.com. 300 IN SVCB 1 foo.example.com. key667=hello"
+        );
     }
 
     /// Example from: https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
@@ -369,12 +388,10 @@ mod tests {
             ttl: 300,
             priority: 1,
             target_name,
-            parameters: vec![
-                ServiceParameter::PRIVATE {
-                    number: 667,
-                    wire_data: b"hello\xd2qoo".to_vec()
-                },
-            ],
+            parameters: vec![ServiceParameter::PRIVATE {
+                number: 667,
+                wire_data: b"hello\xd2qoo".to_vec(),
+            }],
             https: true,
         };
 
@@ -382,8 +399,10 @@ mod tests {
         let result = service_binding.to_string();
 
         // then
-        assert_eq!(result,
-                   "example.com. 300 IN HTTPS 1 foo.example.com. key667=\"hello\\210qoo\"");
+        assert_eq!(
+            result,
+            "example.com. 300 IN HTTPS 1 foo.example.com. key667=\"hello\\210qoo\""
+        );
     }
 
     /// Example from: https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
@@ -397,23 +416,23 @@ mod tests {
             ttl: 7200,
             priority: 1,
             target_name,
-            parameters: vec![
-                ServiceParameter::IPV6_HINT {
-                    hints: vec![
-                        Ipv6Addr::from_str("2001:db8::1").unwrap(),
-                        Ipv6Addr::from_str("2001:db8::53:1").unwrap(),
-                    ],
-                }
-            ],
-            https: false
+            parameters: vec![ServiceParameter::IPV6_HINT {
+                hints: vec![
+                    Ipv6Addr::from_str("2001:db8::1").unwrap(),
+                    Ipv6Addr::from_str("2001:db8::53:1").unwrap(),
+                ],
+            }],
+            https: false,
         };
 
         // when
         let result = service_binding.to_string();
 
         // then
-        assert_eq!(result,
-                   "example.com. 7200 IN SVCB 1 foo.example.com. ipv6hint=\"2001:db8::1,2001:db8::53:1\"");
+        assert_eq!(
+            result,
+            "example.com. 7200 IN SVCB 1 foo.example.com. ipv6hint=\"2001:db8::1,2001:db8::53:1\""
+        );
     }
 
     /// Example from: https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#serviceform
@@ -427,13 +446,11 @@ mod tests {
             ttl: 300,
             priority: 1,
             target_name,
-            parameters: vec![
-                ServiceParameter::IPV6_HINT {
-                    hints: vec![
-                        Ipv6Addr::from_str("2001:db8:ffff:ffff:ffff:ffff:198.51.100.100").unwrap(),
-                    ],
-                }
-            ],
+            parameters: vec![ServiceParameter::IPV6_HINT {
+                hints: vec![
+                    Ipv6Addr::from_str("2001:db8:ffff:ffff:ffff:ffff:198.51.100.100").unwrap(),
+                ],
+            }],
             https: true,
         };
 
@@ -462,18 +479,13 @@ mod tests {
                 // the parameters are deliberately specified in the wrong order
                 // they will be sorted correctly in the presentation format
                 ServiceParameter::ALPN {
-                    alpn_ids: vec![
-                        "h2".to_string(),
-                        "h3-19".to_string(),
-                    ]
+                    alpn_ids: vec!["h2".to_string(), "h3-19".to_string()],
                 },
                 ServiceParameter::MANDATORY {
-                    key_ids: vec![ 4, 1 ], // ipv4hint and alpn are mandatory
+                    key_ids: vec![4, 1], // ipv4hint and alpn are mandatory
                 },
                 ServiceParameter::IPV4_HINT {
-                    hints: vec![
-                        Ipv4Addr::from_str("192.0.2.1").unwrap(),
-                    ],
+                    hints: vec![Ipv4Addr::from_str("192.0.2.1").unwrap()],
                 },
             ],
             https: false,
@@ -498,14 +510,9 @@ mod tests {
             ttl: 300,
             priority: 16,
             target_name,
-            parameters: vec![
-                ServiceParameter::ALPN {
-                    alpn_ids: vec![
-                        "f\\oo,bar".to_string(),
-                        "h2".to_string(),
-                    ]
-                },
-            ],
+            parameters: vec![ServiceParameter::ALPN {
+                alpn_ids: vec!["f\\oo,bar".to_string(), "h2".to_string()],
+            }],
             https: true,
         };
 
@@ -513,7 +520,9 @@ mod tests {
         let result = service_binding.to_string();
 
         // then
-        assert_eq!(result,
-                   "example.org. 300 IN HTTPS 16 foo.example.org. alpn=\"f\\\\\\\\oo\\,bar,h2\"");
+        assert_eq!(
+            result,
+            "example.org. 300 IN HTTPS 16 foo.example.org. alpn=\"f\\\\\\\\oo\\,bar,h2\""
+        );
     }
 }

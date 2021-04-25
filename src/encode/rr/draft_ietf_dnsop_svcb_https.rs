@@ -1,11 +1,18 @@
-use crate::{EncodeError, EncodeResult};
 use crate::encode::Encoder;
 use crate::rr::{Class, ServiceBinding, ServiceBindingMode, ServiceParameter, Type};
+use crate::{EncodeError, EncodeResult};
 
 impl Encoder {
     /// Encode a service binding (SVCB or HTTPS) resource record
-    pub(super) fn rr_service_binding(&mut self, service_binding: &ServiceBinding) -> EncodeResult<()> {
-        let rr_type = if service_binding.https { &Type::HTTPS } else { &Type::SVCB };
+    pub(super) fn rr_service_binding(
+        &mut self,
+        service_binding: &ServiceBinding,
+    ) -> EncodeResult<()> {
+        let rr_type = if service_binding.https {
+            &Type::HTTPS
+        } else {
+            &Type::SVCB
+        };
         self.domain_name(&service_binding.name)?;
         self.rr_type(rr_type);
         self.rr_class(&Class::IN);
@@ -66,7 +73,10 @@ impl Encoder {
                     self.ipv6_addr(hint);
                 }
             }
-            ServiceParameter::PRIVATE { number: _, wire_data, } => {
+            ServiceParameter::PRIVATE {
+                number: _,
+                wire_data,
+            } => {
                 self.vec(wire_data);
             }
             ServiceParameter::KEY_65535 => {}
@@ -81,11 +91,11 @@ mod tests {
     use std::net::{Ipv4Addr, Ipv6Addr};
     use std::str::FromStr;
 
-    use crate::{Dns, DomainName, Flags, Opcode, RCode};
     use crate::encode::encoder::Encoder;
-    use crate::question::{QClass, Question};
     use crate::question::QType::{HTTPS, SVCB};
-    use crate::rr::{RR, ServiceBinding, ServiceBindingMode, ServiceParameter};
+    use crate::question::{QClass, Question};
+    use crate::rr::{ServiceBinding, ServiceBindingMode, ServiceParameter, RR};
+    use crate::{Dns, DomainName, Flags, Opcode, RCode};
 
     #[test]
     fn encode_decode_service_binding() {
@@ -110,7 +120,9 @@ mod tests {
         let result = Dns::decode(encoder.bytes.freeze()).expect("Unable to parse encoded DNS");
         assert_eq!(result.answers.len(), 1);
         let answer = &result.answers[0];
-        assert!(matches!(answer, RR::SVCB(service_binding) if service_binding.mode() == ServiceBindingMode::Alias))
+        assert!(
+            matches!(answer, RR::SVCB(service_binding) if service_binding.mode() == ServiceBindingMode::Alias)
+        )
     }
 
     /// Example from https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#aliasform
@@ -139,8 +151,7 @@ mod tests {
         expected.extend_from_slice(b"\x03foo"); // target subdomain (new data)
         expected.extend_from_slice(b"\xc0\x0c"); // target parent domain (compressed format, first appears at index 12)
 
-        let (_, suffix) = encoder.bytes
-            .split_at(encoder.bytes.len() - expected.len());
+        let (_, suffix) = encoder.bytes.split_at(encoder.bytes.len() - expected.len());
         assert_eq!(suffix, expected.as_slice());
     }
 
@@ -157,7 +168,7 @@ mod tests {
             priority: 1,
             target_name,
             parameters: vec![],
-            https: false
+            https: false,
         };
         let dns = dns(0xccce, service_binding);
 
@@ -165,7 +176,7 @@ mod tests {
         encoder.dns(&dns).unwrap();
 
         // then
-        let ( _, suffix) = encoder.bytes.split_at(encoder.bytes.len() - 3);
+        let (_, suffix) = encoder.bytes.split_at(encoder.bytes.len() - 3);
         assert_eq!(suffix, b"\x00\x01\x00");
     }
 
@@ -181,9 +192,7 @@ mod tests {
             ttl: 300,
             priority: 16,
             target_name,
-            parameters: vec![
-                ServiceParameter::PORT { port: 53 },
-            ],
+            parameters: vec![ServiceParameter::PORT { port: 53 }],
             https: false,
         };
         let dns = dns(0xcddc, service_binding);
@@ -199,8 +208,7 @@ mod tests {
         expected.extend_from_slice(b"\x00\x02"); // value length (2 bytes)
         expected.extend_from_slice(b"\x00\x35"); // value (port 53)
 
-        let (_, suffix) = encoder.bytes
-            .split_at(encoder.bytes.len() - expected.len());
+        let (_, suffix) = encoder.bytes.split_at(encoder.bytes.len() - expected.len());
         assert_eq!(suffix, expected.as_slice());
     }
 
@@ -216,12 +224,10 @@ mod tests {
             ttl: 300,
             priority: 16,
             target_name,
-            parameters: vec![
-                ServiceParameter::PRIVATE {
-                    number: 667,
-                    wire_data: b"hello".to_vec(),
-                },
-            ],
+            parameters: vec![ServiceParameter::PRIVATE {
+                number: 667,
+                wire_data: b"hello".to_vec(),
+            }],
             https: false,
         };
         let dns = dns(0xcfcc, service_binding);
@@ -237,8 +243,7 @@ mod tests {
         expected.extend_from_slice(b"\x00\x05"); // value length (5)
         expected.extend_from_slice(b"hello"); // value
 
-        let (_, suffix) = encoder.bytes
-            .split_at(encoder.bytes.len() - expected.len());
+        let (_, suffix) = encoder.bytes.split_at(encoder.bytes.len() - expected.len());
         assert_eq!(suffix, expected.as_slice());
     }
 
@@ -254,12 +259,10 @@ mod tests {
             ttl: 300,
             priority: 1,
             target_name,
-            parameters: vec![
-                ServiceParameter::PRIVATE {
-                    number: 667,
-                    wire_data: b"hello\xd2qoo".to_vec(),
-                },
-            ],
+            parameters: vec![ServiceParameter::PRIVATE {
+                number: 667,
+                wire_data: b"hello\xd2qoo".to_vec(),
+            }],
             https: false,
         };
         let dns = dns(0xdffd, service_binding);
@@ -275,8 +278,7 @@ mod tests {
         expected.extend_from_slice(b"\x00\x09"); // value length (5)
         expected.extend_from_slice(b"hello\xd2qoo"); // value
 
-        let (_, suffix) = encoder.bytes
-            .split_at(encoder.bytes.len() - expected.len());
+        let (_, suffix) = encoder.bytes.split_at(encoder.bytes.len() - expected.len());
         assert_eq!(suffix, expected.as_slice());
     }
 
@@ -292,14 +294,12 @@ mod tests {
             ttl: 300,
             priority: 1,
             target_name,
-            parameters: vec![
-                ServiceParameter::IPV6_HINT {
-                    hints: vec![
-                        Ipv6Addr::from_str("2001:db8::1").unwrap(),
-                        Ipv6Addr::from_str("2001:db8::53:1").unwrap(),
-                    ],
-                },
-            ],
+            parameters: vec![ServiceParameter::IPV6_HINT {
+                hints: vec![
+                    Ipv6Addr::from_str("2001:db8::1").unwrap(),
+                    Ipv6Addr::from_str("2001:db8::53:1").unwrap(),
+                ],
+            }],
             https: false,
         };
         let dns = dns(0xacca, service_binding);
@@ -314,11 +314,12 @@ mod tests {
         expected.extend_from_slice(b"\xc0\x0c"); // target parent domain (compressed format, first appears at index 12)
         expected.extend_from_slice(b"\x00\x06"); // key 6 (IPv6 hints)
         expected.extend_from_slice(b"\x00\x20"); // length 32
-        expected.extend_from_slice(b"\x20\x01\x0d\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01"); // first IP address
-        expected.extend_from_slice(b"\x20\x01\x0d\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x00\x53\x00\x01"); // second IP address
+        expected
+            .extend_from_slice(b"\x20\x01\x0d\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01"); // first IP address
+        expected
+            .extend_from_slice(b"\x20\x01\x0d\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x00\x53\x00\x01"); // second IP address
 
-        let (_, suffix) = encoder.bytes
-            .split_at(encoder.bytes.len() - expected.len());
+        let (_, suffix) = encoder.bytes.split_at(encoder.bytes.len() - expected.len());
         assert_eq!(suffix, expected.as_slice());
     }
 
@@ -334,13 +335,11 @@ mod tests {
             ttl: 300,
             priority: 1,
             target_name,
-            parameters: vec![
-                ServiceParameter::IPV6_HINT {
-                    hints: vec![
-                        Ipv6Addr::from_str("2001:db8:ffff:ffff:ffff:ffff:198.51.100.100").unwrap(),
-                    ],
-                },
-            ],
+            parameters: vec![ServiceParameter::IPV6_HINT {
+                hints: vec![
+                    Ipv6Addr::from_str("2001:db8:ffff:ffff:ffff:ffff:198.51.100.100").unwrap(),
+                ],
+            }],
             https: false,
         };
         let dns = dns(0xaedc, service_binding);
@@ -354,10 +353,10 @@ mod tests {
         expected.extend_from_slice(b"\xc0\x0c"); // target domain (compressed format, first appears at index 12)
         expected.extend_from_slice(b"\x00\x06"); // key 6 (IPv6 hints)
         expected.extend_from_slice(b"\x00\x10"); // length 16
-        expected.extend_from_slice(b"\x20\x01\x0d\xb8\xff\xff\xff\xff\xff\xff\xff\xff\xc6\x33\x64\x64"); // IP address
+        expected
+            .extend_from_slice(b"\x20\x01\x0d\xb8\xff\xff\xff\xff\xff\xff\xff\xff\xc6\x33\x64\x64"); // IP address
 
-        let (_, suffix) = encoder.bytes
-            .split_at(encoder.bytes.len() - expected.len());
+        let (_, suffix) = encoder.bytes.split_at(encoder.bytes.len() - expected.len());
         assert_eq!(suffix, expected.as_slice());
     }
 
@@ -376,9 +375,15 @@ mod tests {
             // parameters are deliberately presented in the incorrect order
             // they will be sorted correctly prior to sending over the wire
             parameters: vec![
-                ServiceParameter::ALPN { alpn_ids: vec!["h2".to_string(), "h3-19".to_string()] },
-                ServiceParameter::MANDATORY { key_ids: vec![4, 1] },
-                ServiceParameter::IPV4_HINT { hints: vec![Ipv4Addr::from_str("192.0.2.1").unwrap()] }
+                ServiceParameter::ALPN {
+                    alpn_ids: vec!["h2".to_string(), "h3-19".to_string()],
+                },
+                ServiceParameter::MANDATORY {
+                    key_ids: vec![4, 1],
+                },
+                ServiceParameter::IPV4_HINT {
+                    hints: vec![Ipv4Addr::from_str("192.0.2.1").unwrap()],
+                },
             ],
             https: false,
         };
@@ -406,8 +411,7 @@ mod tests {
         expected.extend_from_slice(b"\x00\x04"); // value length 4 (1 IPv4 address)
         expected.extend_from_slice(b"\xc0\x00\x02\x01"); // IP address
 
-        let (_, suffix) = encoder.bytes
-            .split_at(encoder.bytes.len() - expected.len());
+        let (_, suffix) = encoder.bytes.split_at(encoder.bytes.len() - expected.len());
         assert_eq!(suffix, expected.as_slice());
     }
 
@@ -423,9 +427,9 @@ mod tests {
             ttl: 300,
             priority: 16,
             target_name,
-            parameters: vec![
-                ServiceParameter::ALPN { alpn_ids: vec!["f\\oo,bar".to_string(), "h2".to_string()] },
-            ],
+            parameters: vec![ServiceParameter::ALPN {
+                alpn_ids: vec!["f\\oo,bar".to_string(), "h2".to_string()],
+            }],
             https: false,
         };
         let dns = dns(0xdfaf, service_binding);
@@ -445,8 +449,7 @@ mod tests {
         expected.extend_from_slice(b"\x02"); // alpn ID length (2)
         expected.extend_from_slice(b"h2"); // alpn_ids[1] = h2
 
-        let (_, suffix) = encoder.bytes
-            .split_at(encoder.bytes.len() - expected.len());
+        let (_, suffix) = encoder.bytes.split_at(encoder.bytes.len() - expected.len());
         assert_eq!(suffix, expected.as_slice());
     }
 
@@ -454,16 +457,16 @@ mod tests {
         Dns {
             id,
             flags: response_flag(),
-            questions: vec![
-                Question {
-                    domain_name: service_binding.name.to_owned(),
-                    q_class: QClass::IN,
-                    q_type: if service_binding.https { HTTPS } else { SVCB },
-                }
-            ],
-            answers: vec![
-                if service_binding.https { RR::HTTPS(service_binding) } else { RR::SVCB(service_binding) }
-            ],
+            questions: vec![Question {
+                domain_name: service_binding.name.to_owned(),
+                q_class: QClass::IN,
+                q_type: if service_binding.https { HTTPS } else { SVCB },
+            }],
+            answers: vec![if service_binding.https {
+                RR::HTTPS(service_binding)
+            } else {
+                RR::SVCB(service_binding)
+            }],
             authorities: vec![],
             additionals: vec![],
         }
@@ -482,5 +485,4 @@ mod tests {
             rcode: RCode::NoError,
         }
     }
-
 }

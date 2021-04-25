@@ -3,8 +3,8 @@ pub use super::{
     L32, L64, LOC, LP, MB, MD, MF, MG, MINFO, MR, MX, NID, NIMLOC, NS, NSAP, NULL, OPT, PTR, PX,
     RP, RT, SOA, SRV, SSHFP, TXT, URI, WKS, X25,
 };
-use std::fmt::{Display, Formatter, Result as FmtResult};
 use crate::rr::draft_ietf_dnsop_svcb_https::ServiceBinding;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 
 try_from_enum_to_integer! {
     #[repr(u16)]

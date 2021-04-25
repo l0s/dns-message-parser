@@ -1,7 +1,7 @@
-use crate::decode::Decoder;
 use crate::decode::error::DecodeError::TooManyBytes;
-use crate::DecodeResult;
+use crate::decode::Decoder;
 use crate::rr::{ServiceBinding, ServiceParameter};
+use crate::DecodeResult;
 
 use super::Header;
 
@@ -15,7 +15,11 @@ impl<'a, 'b: 'a> Decoder<'a, 'b> {
     /// Parameters
     /// - `header` - the header that precedes the question section
     /// - `https` - true for `HTTPS` resource records, false for `SVCB`
-    pub(super) fn rr_service_binding(&mut self, header: Header, https: bool) -> DecodeResult<ServiceBinding> {
+    pub(super) fn rr_service_binding(
+        &mut self,
+        header: Header,
+        https: bool,
+    ) -> DecodeResult<ServiceBinding> {
         let priority = self.u16()?;
         let target_name = self.domain_name()?;
         let mut parameters = vec![];
@@ -42,7 +46,7 @@ impl<'a, 'b: 'a> Decoder<'a, 'b> {
                     }
                     2 => ServiceParameter::NO_DEFAULT_ALPN,
                     3 => ServiceParameter::PORT {
-                        port: value_decoder.u16()?
+                        port: value_decoder.u16()?,
                     },
                     4 => {
                         let mut hints = vec![];
@@ -67,12 +71,10 @@ impl<'a, 'b: 'a> Decoder<'a, 'b> {
                         ServiceParameter::IPV6_HINT { hints }
                     }
                     65535 => ServiceParameter::KEY_65535,
-                    number => {
-                        ServiceParameter::PRIVATE {
-                            number,
-                            wire_data: value_decoder.vec()?,
-                        }
-                    }
+                    number => ServiceParameter::PRIVATE {
+                        number,
+                        wire_data: value_decoder.vec()?,
+                    },
                 };
                 value_decoder.finished()?;
                 parameters.push(service_parameter);
@@ -103,8 +105,8 @@ mod tests {
 
     use crate::decode::decoder::Decoder;
     use crate::decode::rr::enums::Header;
-    use crate::DomainName;
     use crate::rr::ServiceParameter;
+    use crate::DomainName;
 
     /// https://github.com/MikeBishop/dns-alt-svc/blob/master/draft-ietf-dnsop-svcb-https.md#aliasform
     #[test]
@@ -125,9 +127,15 @@ mod tests {
 
         // then
         assert_eq!(result.priority, 0);
-        assert_eq!(result.target_name, DomainName::try_from("foo.example.com").unwrap());
+        assert_eq!(
+            result.target_name,
+            DomainName::try_from("foo.example.com").unwrap()
+        );
         assert_eq!(result.ttl, 7200);
-        assert_eq!(result.name, DomainName::try_from("test.example.com").unwrap());
+        assert_eq!(
+            result.name,
+            DomainName::try_from("test.example.com").unwrap()
+        );
         assert!(result.parameters.is_empty());
         assert!(result.to_string().ends_with("0 foo.example.com."));
     }
@@ -153,7 +161,10 @@ mod tests {
         assert_eq!(result.priority, 1);
         assert_eq!(result.target_name, DomainName::try_from(".").unwrap());
         assert_eq!(result.ttl, 7200);
-        assert_eq!(result.name, DomainName::try_from("test.example.com").unwrap());
+        assert_eq!(
+            result.name,
+            DomainName::try_from("test.example.com").unwrap()
+        );
         assert!(result.parameters.is_empty());
         assert!(result.to_string().ends_with("1 ."));
     }
@@ -180,9 +191,15 @@ mod tests {
 
         // then
         assert_eq!(result.priority, 16);
-        assert_eq!(result.target_name, DomainName::try_from("foo.example.com").unwrap());
+        assert_eq!(
+            result.target_name,
+            DomainName::try_from("foo.example.com").unwrap()
+        );
         assert_eq!(result.ttl, 7200);
-        assert_eq!(result.name, DomainName::try_from("test.example.com").unwrap());
+        assert_eq!(
+            result.name,
+            DomainName::try_from("test.example.com").unwrap()
+        );
         assert_eq!(result.parameters.len(), 1);
         assert!(matches!(result.parameters[0], ServiceParameter::PORT {port} if port == 53));
         assert!(result.to_string().ends_with("16 foo.example.com. port=53"));
@@ -210,9 +227,15 @@ mod tests {
 
         // then
         assert_eq!(result.priority, 1);
-        assert_eq!(result.target_name, DomainName::try_from("foo.example.com").unwrap());
+        assert_eq!(
+            result.target_name,
+            DomainName::try_from("foo.example.com").unwrap()
+        );
         assert_eq!(result.ttl, 7200);
-        assert_eq!(result.name, DomainName::try_from("test.example.com").unwrap());
+        assert_eq!(
+            result.name,
+            DomainName::try_from("test.example.com").unwrap()
+        );
         assert_eq!(result.parameters.len(), 1);
         assert!(matches!(&result.parameters[0],
             ServiceParameter::PRIVATE { number, wire_data, } if *number == 667
@@ -241,9 +264,15 @@ mod tests {
 
         // then
         assert_eq!(result.priority, 1);
-        assert_eq!(result.target_name, DomainName::try_from("foo.example.com").unwrap());
+        assert_eq!(
+            result.target_name,
+            DomainName::try_from("foo.example.com").unwrap()
+        );
         assert_eq!(result.ttl, 7200);
-        assert_eq!(result.name, DomainName::try_from("test.example.com").unwrap());
+        assert_eq!(
+            result.name,
+            DomainName::try_from("test.example.com").unwrap()
+        );
         assert_eq!(result.parameters.len(), 1);
         assert!(matches!(&result.parameters[0],
             ServiceParameter::PRIVATE { number, wire_data, } if *number == 667
@@ -259,8 +288,10 @@ mod tests {
         bytes.extend_from_slice(b"\x03foo\x07example\x03com\x00"); // target
         bytes.extend_from_slice(b"\x00\x06"); // key 6 (IPv6 hint)
         bytes.extend_from_slice(b"\x00\x20"); // value length: 32 bytes (2 octets)
-        bytes.extend_from_slice(b"\x20\x01\x0d\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01"); // first address
-        bytes.extend_from_slice(b"\x20\x01\x0d\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x00\x53\x00\x01"); // second address
+        bytes
+            .extend_from_slice(b"\x20\x01\x0d\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01"); // first address
+        bytes
+            .extend_from_slice(b"\x20\x01\x0d\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x00\x53\x00\x01"); // second address
         let mut decoder = Decoder::main(Bytes::from(bytes));
         let header = Header {
             domain_name: DomainName::try_from("test.example.com").unwrap(),
@@ -273,9 +304,15 @@ mod tests {
 
         // then
         assert_eq!(result.priority, 1);
-        assert_eq!(result.target_name, DomainName::try_from("foo.example.com").unwrap());
+        assert_eq!(
+            result.target_name,
+            DomainName::try_from("foo.example.com").unwrap()
+        );
         assert_eq!(result.ttl, 7200);
-        assert_eq!(result.name, DomainName::try_from("test.example.com").unwrap());
+        assert_eq!(
+            result.name,
+            DomainName::try_from("test.example.com").unwrap()
+        );
         assert_eq!(result.parameters.len(), 1);
         assert!(matches!(&result.parameters[0],
             ServiceParameter::IPV6_HINT { hints } if hints.len() == 2
@@ -292,7 +329,8 @@ mod tests {
         bytes.extend_from_slice(b"\x07example\x03com\x00"); // target
         bytes.extend_from_slice(b"\x00\x06"); // key 6 (IPv6 hint)
         bytes.extend_from_slice(b"\x00\x10"); // value length: 16 bytes (2 octets)
-        bytes.extend_from_slice(b"\x20\x01\x0d\xb8\xff\xff\xff\xff\xff\xff\xff\xff\xc6\x33\x64\x64"); // address
+        bytes
+            .extend_from_slice(b"\x20\x01\x0d\xb8\xff\xff\xff\xff\xff\xff\xff\xff\xc6\x33\x64\x64"); // address
         let mut decoder = Decoder::main(Bytes::from(bytes));
         let header = Header {
             domain_name: DomainName::try_from("test.example.com").unwrap(),
@@ -305,9 +343,15 @@ mod tests {
 
         // then
         assert_eq!(result.priority, 1);
-        assert_eq!(result.target_name, DomainName::try_from("example.com").unwrap());
+        assert_eq!(
+            result.target_name,
+            DomainName::try_from("example.com").unwrap()
+        );
         assert_eq!(result.ttl, 7200);
-        assert_eq!(result.name, DomainName::try_from("test.example.com").unwrap());
+        assert_eq!(
+            result.name,
+            DomainName::try_from("test.example.com").unwrap()
+        );
         assert_eq!(result.parameters.len(), 1);
         assert!(matches!(&result.parameters[0],
              ServiceParameter::IPV6_HINT { hints } if hints.len() == 1 && hints[0] == Ipv6Addr::from_str("2001:db8:ffff:ffff:ffff:ffff:198.51.100.100").unwrap()))
@@ -344,9 +388,15 @@ mod tests {
 
         // then
         assert_eq!(result.priority, 16);
-        assert_eq!(result.target_name, DomainName::try_from("foo.example.org").unwrap());
+        assert_eq!(
+            result.target_name,
+            DomainName::try_from("foo.example.org").unwrap()
+        );
         assert_eq!(result.ttl, 7200);
-        assert_eq!(result.name, DomainName::try_from("test.example.com").unwrap());
+        assert_eq!(
+            result.name,
+            DomainName::try_from("test.example.com").unwrap()
+        );
         assert_eq!(result.parameters.len(), 3);
         assert!(matches!(&result.parameters[0],
             ServiceParameter::MANDATORY{ key_ids } if key_ids.len() == 1 && key_ids[ 0 ] == 1 ));
@@ -382,9 +432,15 @@ mod tests {
 
         // then
         assert_eq!(result.priority, 16);
-        assert_eq!(result.target_name, DomainName::try_from("foo.example.org").unwrap());
+        assert_eq!(
+            result.target_name,
+            DomainName::try_from("foo.example.org").unwrap()
+        );
         assert_eq!(result.ttl, 7200);
-        assert_eq!(result.name, DomainName::try_from("test.example.com").unwrap());
+        assert_eq!(
+            result.name,
+            DomainName::try_from("test.example.com").unwrap()
+        );
         assert_eq!(result.parameters.len(), 1);
         assert!(matches!(&result.parameters[0],
             ServiceParameter::ALPN { alpn_ids } if alpn_ids.len() == 2 && alpn_ids[0] == "f\\oo,bar" && alpn_ids[1] == "h2"));
